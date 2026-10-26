@@ -216,6 +216,17 @@
   input.cat-input:focus { border-color: var(--rose); background: #fff; }
   .vendor-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; font-size: 0.75rem; color: var(--muted); }
   .event-time { color: var(--muted); font-size: 0.78rem; }
+  .emoji-btn {
+    width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; border: 1px solid var(--line);
+    background: var(--bg); font-size: 1.45rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .emoji-btn:hover { border-color: var(--rose); }
+  .emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .emoji-choice {
+    aspect-ratio: 1; border-radius: 14px; border: 1px solid var(--line); background: #fff;
+    font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .emoji-choice.on { border-color: var(--rose-deep); background: var(--rose-soft); }
 
   /* 설정 */
   .setting-label { display: block; font-size: 0.8rem; color: var(--muted); font-weight: 500; margin-bottom: 8px; }
@@ -335,12 +346,20 @@
     <div class="sheet-title">준비 현황 추가</div>
     <input type="text" id="new-vendor-category" list="vendor-categories" placeholder="분류 (예: 식장, 스튜디오)" aria-label="분류">
     <input type="text" id="new-vendor-name" placeholder="업체 이름" aria-label="업체 이름">
-    <p class="hint">추가한 뒤 날짜·시간·장소를 채우면 돼요.</p>
+    <p class="hint">추가한 뒤 날짜와 예약금·잔금을 채우면 돼요. 이모지는 분류에 맞게 자동으로 붙고, 카드에서 눌러 바꿀 수 있어요.</p>
     <div class="dialog-actions">
       <button type="button" class="sheet-cancel" onclick="closeSheet()">취소</button>
       <button type="submit" class="sheet-ok">추가</button>
     </div>
   </form>
+  <div id="sheet-emoji" class="sheet-card" hidden>
+    <div class="sheet-title">이모지 고르기</div>
+    <div id="emoji-grid" class="emoji-grid"></div>
+    <div class="dialog-actions">
+      <button type="button" class="sheet-cancel" onclick="resetEmoji()">분류에 맞게 자동</button>
+      <button type="button" class="sheet-cancel" onclick="closeSheet()">닫기</button>
+    </div>
+  </div>
 </div>
 
 <div id="dialog" hidden>
@@ -522,7 +541,23 @@
   const dayOfColors = ["#E8A5A5", "#D9B3DE", "#EBC598", "#A9C7AE", "#9FBFE0", "#E6B9C9"];
 
   // 업체 한 곳에 저장하는 칸
-  const VENDOR_FIELDS = ["category", "name", "date", "time", "place", "contact", "cost", "memo"];
+  const VENDOR_FIELDS = ["emoji", "category", "name", "date", "contact", "deposit", "balance", "memo"];
+
+  // 분류에 맞는 기본 이모지 (직접 고르면 그게 우선)
+  const CATEGORY_EMOJI = [
+    ["식장", "💒"], ["스튜디오", "📸"], ["드레스", "👗"], ["스냅", "📷"], ["DVD", "🎥"], ["영상", "🎥"],
+    ["혼주 메이크업", "💄"], ["혼주 예복", "👔"], ["예복", "🤵"], ["한복", "👘"], ["메이크업", "💄"],
+    ["부케", "💐"], ["청첩장", "💌"], ["예물", "💍"], ["반지", "💍"], ["사회", "🎤"], ["축가", "🎶"],
+    ["버스", "🚌"], ["신혼여행", "✈️"], ["항공", "✈️"], ["숙소", "🏨"], ["상견례", "🍽️"], ["식사", "🍽️"],
+    ["플래너", "📋"], ["답례품", "🎁"], ["신혼집", "🏠"], ["혼수", "🛋️"], ["헬퍼", "🙋"]
+  ];
+  const EMOJI_CHOICES = ["💒", "📸", "👗", "👰", "🤵", "💄", "👘", "👔", "📷", "🎥", "💐", "💌",
+    "💍", "🎤", "🎶", "🚌", "✈️", "🏨", "🍽️", "📋", "🎁", "🏠", "🛋️", "💅", "🍰", "🥂", "💰", "🧾", "⭐", "🏷️"];
+  function vendorEmoji(v) {
+    if (v.emoji) return v.emoji;
+    const hit = CATEGORY_EMOJI.find(([word]) => (v.category || "").includes(word));
+    return hit ? hit[1] : "🏷️";
+  }
 
   let appData = null;
   // 접힌 카드 (저장하지 않음, 화면에서만 사용). 처음엔 모두 펼친 상태
@@ -553,7 +588,15 @@
     if (!Array.isArray(data.notes)) data.notes = [];
     data.notes.forEach(n => { if (!Array.isArray(n.items)) n.items = []; if (typeof n.memo !== 'string') n.memo = ""; if (!n.date) n.date = ""; });
     if (!Array.isArray(data.vendors)) data.vendors = [];
-    data.vendors.forEach(v => { VENDOR_FIELDS.forEach(f => { if (typeof v[f] !== 'string') v[f] = ""; }); });
+    data.vendors.forEach(v => {
+      // 예전 칸(장소·시간·금액)에 적은 내용은 메모로 옮김
+      const moved = [["place", "장소"], ["time", "시간"], ["cost", "금액"]]
+        .filter(([f]) => typeof v[f] === 'string' && v[f].trim())
+        .map(([f, label]) => `${label}: ${v[f].trim()}`);
+      if (moved.length) v.memo = [moved.join('\n'), v.memo].filter(Boolean).join('\n');
+      delete v.place; delete v.time; delete v.cost;
+      VENDOR_FIELDS.forEach(f => { if (typeof v[f] !== 'string') v[f] = ""; });
+    });
     data.phases.forEach(p => { if (!Array.isArray(p.checklist)) p.checklist = []; if (!Array.isArray(p.timeline)) p.timeline = []; });
     // 당일 준비물이 없으면 기본값 추가
     if (!data.dayOf || !Array.isArray(data.dayOf.sections)) data.dayOf = JSON.parse(JSON.stringify(defaultDayOf));
@@ -887,7 +930,7 @@
     const upcoming = [
       ...appData.customEvents,
       ...appData.notes.filter(n => n.date).map(n => ({ date: n.date, name: `📝 ${n.title}` })),
-      ...appData.vendors.filter(v => v.date).map(v => ({ date: v.date, time: v.time, name: `${v.category ? v.category + ' · ' : ''}${v.name}` }))
+      ...appData.vendors.filter(v => v.date).map(v => ({ date: v.date, name: `${vendorEmoji(v)} ${v.category ? v.category + ' · ' : ''}${v.name}` }))
     ]
       .filter(e => e.date && daysUntil(e.date) >= 0)
       .sort((a, b) => parseDate(a.date) - parseDate(b.date));
@@ -1084,14 +1127,13 @@
   }
 
   // --- 업체 탭 ---
-  // 날짜 있는 업체는 날짜·시간순, 날짜 없는 업체는 뒤에 추가한 순서대로
+  // 날짜 있는 업체는 날짜순, 날짜 없는 업체는 뒤에 추가한 순서대로
   function sortedVendors() {
     return appData.vendors
       .map((v, idx) => ({ v, idx }))
       .sort((a, b) => {
         if (!!a.v.date !== !!b.v.date) return a.v.date ? -1 : 1;
         if (a.v.date && a.v.date !== b.v.date) return parseDate(a.v.date) - parseDate(b.v.date);
-        if (a.v.time !== b.v.time) return (a.v.time || '99') < (b.v.time || '99') ? -1 : 1;
         return a.v.id - b.v.id;
       });
   }
@@ -1101,7 +1143,7 @@
     return `
       <label for="v-${v.id}-${field}">${label}</label>
       <input type="${type}" id="v-${v.id}-${field}" value="${escapeHtml(v[field])}" placeholder="${placeholder}"
-        ${type === 'date' || type === 'time'
+        ${type === 'date'
           ? `onchange="updateVendor(${idx}, '${field}', this.value, true)"`
           : `oninput="updateVendor(${idx}, '${field}', this.value)"`}>`;
   }
@@ -1119,14 +1161,12 @@
       if (v.date) {
         const diff = daysUntil(v.date);
         const d = parseDate(v.date);
-        when = `<span class="note-date-pill ${diff < 0 ? 'past' : ''}">${d.getMonth() + 1}/${d.getDate()}${v.time ? ' ' + escapeHtml(v.time) : ''} · ${ddayText(diff)}</span>`;
-      } else if (v.time) {
-        when = `<span class="note-date-pill">${escapeHtml(v.time)}</span>`;
+        when = `<span class="note-date-pill ${diff < 0 ? 'past' : ''}">${d.getMonth() + 1}/${d.getDate()} · ${ddayText(diff)}</span>`;
       }
       return `
         <div class="card ${collapsed.has(key) ? 'collapsed' : ''}" id="card-${key}" style="--accent:#C9A78C">
           <div class="group-head">
-            <span class="dot"></span>
+            <button class="emoji-btn" onclick="openEmojiPicker(${idx})" aria-label="이모지 바꾸기" title="이모지 바꾸기">${vendorEmoji(v)}</button>
             <div class="group-titles">
               <div class="card-title editable" contenteditable="true" spellcheck="false" ${ENTER_BLUR}
                 onblur="updateVendorName(${idx}, this.innerText)">${escapeHtml(v.name)}</div>
@@ -1144,12 +1184,11 @@
           <div class="group-body">
             <div class="field-grid">
               ${vendorField(idx, 'date', '날짜', 'date', '')}
-              ${vendorField(idx, 'time', '시간', 'time', '')}
-              ${vendorField(idx, 'place', '장소', 'text', '주소, 층, 홀 이름 등')}
               ${vendorField(idx, 'contact', '담당자', 'text', '이름 · 연락처')}
-              ${vendorField(idx, 'cost', '금액', 'text', '총액, 계약금, 잔금 등')}
+              ${vendorField(idx, 'deposit', '예약금', 'text', '예: 50만원 (10/1 입금)')}
+              ${vendorField(idx, 'balance', '잔금', 'text', '예: 150만원 (당일 현금)')}
               <label class="top" for="v-${v.id}-memo">메모</label>
-              <textarea class="memo" id="v-${v.id}-memo" placeholder="계약 조건, 포함 사항, 챙길 것 등"
+              <textarea class="memo" id="v-${v.id}-memo" placeholder="장소, 시간, 계약 조건, 포함 사항 등"
                 oninput="autoGrow(this); updateVendor(${idx}, 'memo', this.value)">${escapeHtml(v.memo)}</textarea>
             </div>
           </div>
@@ -1171,9 +1210,36 @@
     appData.vendors.push(vendor);
     catEl.value = ""; nameEl.value = "";
     closeSheet();
-    renderVendors(); autoSave();
+    renderVendors(); renderChecklist(); autoSave();
     document.getElementById(`card-v${vendor.id}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
-    showToast("업체를 추가했어요. 날짜·시간·장소를 채워주세요");
+    showToast("추가했어요. 날짜와 금액을 채워주세요");
+  }
+
+  // 이모지 고르기
+  let emojiTarget = null;
+  function openEmojiPicker(idx) {
+    emojiTarget = idx;
+    const current = vendorEmoji(appData.vendors[idx]);
+    document.getElementById('emoji-grid').innerHTML = EMOJI_CHOICES.map(e =>
+      `<button type="button" class="emoji-choice ${e === current ? 'on' : ''}" onclick="pickEmoji('${e}')">${e}</button>`).join('');
+    document.getElementById('sheet-note').hidden = true;
+    document.getElementById('sheet-vendor').hidden = true;
+    document.getElementById('sheet-emoji').hidden = false;
+    document.getElementById('sheet').hidden = false;
+  }
+  function pickEmoji(e) {
+    if (emojiTarget === null) return;
+    appData.vendors[emojiTarget].emoji = e;
+    emojiTarget = null;
+    closeSheet();
+    renderVendors(); renderChecklist(); autoSave();
+  }
+  function resetEmoji() {
+    if (emojiTarget === null) return;
+    appData.vendors[emojiTarget].emoji = "";
+    emojiTarget = null;
+    closeSheet();
+    renderVendors(); renderChecklist(); autoSave();
   }
   // 날짜·시간·분류가 바뀌면 순서와 '다가오는 일정'도 다시 그림
   function updateVendor(idx, field, value, rerender) {
@@ -1215,6 +1281,7 @@
     const form = currentTab === 'vendors' ? 'sheet-vendor' : 'sheet-note';
     document.getElementById('sheet-note').hidden = form !== 'sheet-note';
     document.getElementById('sheet-vendor').hidden = form !== 'sheet-vendor';
+    document.getElementById('sheet-emoji').hidden = true;
     document.getElementById('sheet').hidden = false;
     document.querySelector(`#${form} input`).focus();
   }

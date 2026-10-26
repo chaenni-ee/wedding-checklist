@@ -336,7 +336,6 @@
     <input type="text" id="new-note-title" placeholder="제목 (예: 식장 뷔페 시식)" aria-label="메모 제목">
     <label class="sheet-label" for="new-note-date">날짜 (선택)</label>
     <input type="date" id="new-note-date">
-    <p class="hint">날짜를 넣으면 체크리스트 탭의 '다가오는 일정'에도 보여요.</p>
     <div class="dialog-actions">
       <button type="button" class="sheet-cancel" onclick="closeSheet()">취소</button>
       <button type="submit" class="sheet-ok">만들기</button>
@@ -385,7 +384,6 @@
 <div class="container">
 
   <div id="tab-checklist" class="tab-content active">
-    <div id="upcoming-container"></div>
     <div id="checklist-container"></div>
   </div>
 
@@ -447,7 +445,7 @@
 
     <div class="card">
       <div class="card-title">나의 일정</div>
-      <div class="card-sub">다가오는 일정은 체크리스트 탭 맨 위에 보여요</div>
+      <div class="card-sub">결혼 준비 중 기억해둘 날짜를 적어두세요</div>
       <div id="custom-events-list" style="margin-top:8px;"></div>
       <div class="form-box">
         <div class="add-row" style="margin-top:0;">
@@ -926,28 +924,6 @@
 
   // --- 체크리스트 탭 ---
   function renderChecklist() {
-    // 나의 일정 + 날짜가 있는 메모·업체
-    const upcoming = [
-      ...appData.customEvents,
-      ...appData.notes.filter(n => n.date).map(n => ({ date: n.date, name: `📝 ${n.title}` })),
-      ...appData.vendors.filter(v => v.date).map(v => ({ date: v.date, name: `${vendorEmoji(v)} ${v.category ? v.category + ' · ' : ''}${v.name}` }))
-    ]
-      .filter(e => e.date && daysUntil(e.date) >= 0)
-      .sort((a, b) => parseDate(a.date) - parseDate(b.date));
-    let upHtml = "";
-    if (upcoming.length > 0) {
-      upHtml = `<div class="section-label">다가오는 일정</div><div class="card">` +
-        upcoming.map(e => {
-          const d = parseDate(e.date);
-          return `
-            <div class="event-row">
-              <div class="event-badge">${d.getMonth() + 1}월<b>${d.getDate()}</b></div>
-              <div class="event-name">${escapeHtml(e.name)}${e.time ? ` <span class="event-time">${escapeHtml(e.time)}</span>` : ''}</div>
-              <div class="event-dday">${ddayText(daysUntil(e.date))}</div>
-            </div>`;
-        }).join('') + `</div>`;
-    }
-    document.getElementById('upcoming-container').innerHTML = upHtml;
 
     const container = document.getElementById('checklist-container');
     let html = `<div class="section-label">단계별 체크리스트</div>`;
@@ -1241,7 +1217,7 @@
     closeSheet();
     renderVendors(); renderChecklist(); autoSave();
   }
-  // 날짜·시간·분류가 바뀌면 순서와 '다가오는 일정'도 다시 그림
+  // 날짜·분류가 바뀌면 순서와 이모지도 다시 그림
   function updateVendor(idx, field, value, rerender) {
     if (appData.vendors[idx][field] === value) return;
     appData.vendors[idx][field] = value;

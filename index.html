@@ -200,6 +200,22 @@
   .note-date-input { margin-top: 10px; display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--muted); }
   .note-date-input input { flex: 0 1 auto; padding: 7px 10px; font-size: 0.82rem; }
   .sub-label { font-size: 0.75rem; color: var(--muted); font-weight: 500; margin: 14px 2px 2px; }
+  textarea.memo.record { min-height: 150px; background: #FFFDF8; border-color: #F1E6D6; overflow: hidden; }
+  textarea.memo.record:focus { background: #fff; }
+
+  /* 업체 */
+  .field-grid { display: grid; grid-template-columns: 76px 1fr; gap: 8px 10px; align-items: center; margin-top: 12px; }
+  .field-grid > label { font-size: 0.78rem; color: var(--muted); }
+  .field-grid input { padding: 9px 12px; font-size: 0.88rem; width: 100%; }
+  .field-grid textarea.memo { margin-top: 0; min-height: 60px; overflow: hidden; }
+  .field-grid .top { align-self: start; padding-top: 10px; }
+  input.cat-input {
+    flex: 0 1 auto; width: 7.5em; padding: 3px 10px; border-radius: 10px; border: 1px solid transparent;
+    background: var(--rose-soft); color: var(--rose-deep); font-size: 0.75rem; font-weight: 500;
+  }
+  input.cat-input:focus { border-color: var(--rose); background: #fff; }
+  .vendor-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; font-size: 0.75rem; color: var(--muted); }
+  .event-time { color: var(--muted); font-size: 0.78rem; }
 
   /* 설정 */
   .setting-label { display: block; font-size: 0.8rem; color: var(--muted); font-weight: 500; margin-bottom: 8px; }
@@ -348,6 +364,30 @@
     <div id="notes-container"></div>
   </div>
 
+  <div id="tab-vendors" class="tab-content">
+    <div class="section-label">업체 · 예약</div>
+    <div class="card">
+      <div class="card-title">업체 추가</div>
+      <div class="card-sub">계약했거나 예약한 곳을 날짜·시간·장소와 함께 모아두세요</div>
+      <div class="add-row">
+        <input type="text" id="new-vendor-category" list="vendor-categories" placeholder="분류 (예: 식장)" style="flex:0 1 38%;">
+        <input type="text" id="new-vendor-name" placeholder="업체 이름"
+          onkeydown="if(event.key==='Enter' && !event.isComposing) addVendor()">
+      </div>
+      <div class="add-row">
+        <button class="btn-add" style="flex:1;" onclick="addVendor()">추가</button>
+      </div>
+      <datalist id="vendor-categories">
+        <option value="식장"><option value="스튜디오"><option value="드레스"><option value="메이크업">
+        <option value="본식 스냅"><option value="본식 DVD"><option value="예복"><option value="한복">
+        <option value="혼주 메이크업"><option value="혼주 예복"><option value="부케"><option value="청첩장">
+        <option value="예물"><option value="사회자"><option value="축가"><option value="전세버스">
+        <option value="신혼여행"><option value="상견례"><option value="플래너">
+      </datalist>
+    </div>
+    <div id="vendors-container"></div>
+  </div>
+
   <div id="tab-settings" class="tab-content">
     <div class="section-label">설정</div>
 
@@ -399,6 +439,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 9l2 2 4-4M8 16h8"/></svg>
     <span>체크리스트</span>
   </button>
+  <button class="nav-item" data-tab="vendors" onclick="switchTab('vendors')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M3 10l2-6h14l2 6M9 21v-6h6v6"/></svg>
+    <span>업체</span>
+  </button>
   <button class="nav-item" data-tab="dayof" onclick="switchTab('dayof')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/></svg>
     <span>당일 준비물</span>
@@ -449,6 +493,9 @@
   // 당일 준비물 구분별 색상
   const dayOfColors = ["#E8A5A5", "#D9B3DE", "#EBC598", "#A9C7AE", "#9FBFE0", "#E6B9C9"];
 
+  // 업체 한 곳에 저장하는 칸
+  const VENDOR_FIELDS = ["category", "name", "date", "time", "place", "contact", "cost", "memo"];
+
   let appData = null;
   // 접힌 카드 (저장하지 않음, 화면에서만 사용). 처음엔 모두 펼친 상태
   const collapsed = new Set();
@@ -477,6 +524,8 @@
     if (!Array.isArray(data.customEvents)) data.customEvents = [];
     if (!Array.isArray(data.notes)) data.notes = [];
     data.notes.forEach(n => { if (!Array.isArray(n.items)) n.items = []; if (typeof n.memo !== 'string') n.memo = ""; if (!n.date) n.date = ""; });
+    if (!Array.isArray(data.vendors)) data.vendors = [];
+    data.vendors.forEach(v => { VENDOR_FIELDS.forEach(f => { if (typeof v[f] !== 'string') v[f] = ""; }); });
     data.phases.forEach(p => { if (!Array.isArray(p.checklist)) p.checklist = []; if (!Array.isArray(p.timeline)) p.timeline = []; });
     // 당일 준비물이 없으면 기본값 추가
     if (!data.dayOf || !Array.isArray(data.dayOf.sections)) data.dayOf = JSON.parse(JSON.stringify(defaultDayOf));
@@ -705,6 +754,7 @@
     renderHeader();
     renderChecklist();
     renderDayOf();
+    renderVendors();
     renderNotes();
     renderSettings();
   }
@@ -748,6 +798,7 @@
     const card = document.getElementById('card-' + key);
     if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
     card.classList.toggle('collapsed', collapsed.has(key));
+    card.querySelectorAll('textarea.memo').forEach(autoGrow);
   }
 
   function showToast(msg) {
@@ -804,10 +855,11 @@
 
   // --- 체크리스트 탭 ---
   function renderChecklist() {
-    // 나의 일정 + 날짜가 있는 메모
+    // 나의 일정 + 날짜가 있는 메모·업체
     const upcoming = [
       ...appData.customEvents,
-      ...appData.notes.filter(n => n.date).map(n => ({ date: n.date, name: `📝 ${n.title}` }))
+      ...appData.notes.filter(n => n.date).map(n => ({ date: n.date, name: `📝 ${n.title}` })),
+      ...appData.vendors.filter(v => v.date).map(v => ({ date: v.date, time: v.time, name: `${v.category ? v.category + ' · ' : ''}${v.name}` }))
     ]
       .filter(e => e.date && daysUntil(e.date) >= 0)
       .sort((a, b) => parseDate(a.date) - parseDate(b.date));
@@ -819,7 +871,7 @@
           return `
             <div class="event-row">
               <div class="event-badge">${d.getMonth() + 1}월<b>${d.getDate()}</b></div>
-              <div class="event-name">${escapeHtml(e.name)}</div>
+              <div class="event-name">${escapeHtml(e.name)}${e.time ? ` <span class="event-time">${escapeHtml(e.time)}</span>` : ''}</div>
               <div class="event-dday">${ddayText(daysUntil(e.date))}</div>
             </div>`;
         }).join('') + `</div>`;
@@ -976,10 +1028,7 @@
           </div>
           ${total ? `<div class="mini-progress"><div style="width:${done / total * 100}%"></div></div>` : ''}
           <div class="group-body">
-            <div class="sub-label">메모</div>
-            <textarea class="memo" id="note-memo-${n.id}" placeholder="자유롭게 적어두세요 (답변, 금액, 담당자 연락처 등)"
-              oninput="updateNoteMemo(${idx}, this.value)">${escapeHtml(n.memo)}</textarea>
-            <div class="sub-label">체크리스트</div>
+            <div class="sub-label">✅ 물어볼 것 · 할 일</div>
             <div class="item-list" data-kind="note" data-group="${idx}">${items}</div>
             ${items ? '' : '<div class="empty">물어볼 것이나 할 일을 추가해보세요</div>'}
             <div class="add-row">
@@ -987,12 +1036,134 @@
                 onkeydown="if(event.key==='Enter' && !event.isComposing) addNoteItem(${idx})">
               <button class="btn-add" onclick="addNoteItem(${idx})">추가</button>
             </div>
+            <div class="sub-label" style="margin-top:18px;">📝 기록 · 들은 내용</div>
+            <textarea class="memo record" id="note-memo-${n.id}" placeholder="들은 답변, 금액, 담당자 이름·연락처, 느낀 점 등을 자유롭게 적어두세요"
+              oninput="autoGrow(this); updateNoteMemo(${idx}, this.value)">${escapeHtml(n.memo)}</textarea>
             <label class="note-date-input">날짜
               <input type="date" value="${escapeHtml(n.date)}" onchange="updateNoteDate(${idx}, this.value)">
             </label>
           </div>
         </div>`;
     }).join('');
+    container.querySelectorAll('textarea.memo').forEach(autoGrow);
+  }
+
+  // 메모칸 높이를 내용에 맞게 늘림
+  function autoGrow(el) {
+    if (!el.offsetParent) return; // 숨겨진 탭/접힌 카드는 보일 때 다시 맞춤
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 2 + 'px';
+  }
+
+  // --- 업체 탭 ---
+  // 날짜 있는 업체는 날짜·시간순, 날짜 없는 업체는 뒤에 추가한 순서대로
+  function sortedVendors() {
+    return appData.vendors
+      .map((v, idx) => ({ v, idx }))
+      .sort((a, b) => {
+        if (!!a.v.date !== !!b.v.date) return a.v.date ? -1 : 1;
+        if (a.v.date && a.v.date !== b.v.date) return parseDate(a.v.date) - parseDate(b.v.date);
+        if (a.v.time !== b.v.time) return (a.v.time || '99') < (b.v.time || '99') ? -1 : 1;
+        return a.v.id - b.v.id;
+      });
+  }
+
+  function vendorField(idx, field, label, type, placeholder) {
+    const v = appData.vendors[idx];
+    return `
+      <label for="v-${v.id}-${field}">${label}</label>
+      <input type="${type}" id="v-${v.id}-${field}" value="${escapeHtml(v[field])}" placeholder="${placeholder}"
+        ${type === 'date' || type === 'time'
+          ? `onchange="updateVendor(${idx}, '${field}', this.value, true)"`
+          : `oninput="updateVendor(${idx}, '${field}', this.value)"`}>`;
+  }
+
+  function renderVendors() {
+    const container = document.getElementById('vendors-container');
+    const list = sortedVendors();
+    if (list.length === 0) {
+      container.innerHTML = `<div class="card"><div class="empty">아직 등록한 업체가 없어요. 위에서 식장부터 추가해보세요.</div></div>`;
+      return;
+    }
+    container.innerHTML = list.map(({ v, idx }) => {
+      const key = 'v' + v.id;
+      let when = "";
+      if (v.date) {
+        const diff = daysUntil(v.date);
+        const d = parseDate(v.date);
+        when = `<span class="note-date-pill ${diff < 0 ? 'past' : ''}">${d.getMonth() + 1}/${d.getDate()}${v.time ? ' ' + escapeHtml(v.time) : ''} · ${ddayText(diff)}</span>`;
+      } else if (v.time) {
+        when = `<span class="note-date-pill">${escapeHtml(v.time)}</span>`;
+      }
+      return `
+        <div class="card ${collapsed.has(key) ? 'collapsed' : ''}" id="card-${key}" style="--accent:#C9A78C">
+          <div class="group-head">
+            <span class="dot"></span>
+            <div class="group-titles">
+              <div class="card-title editable" contenteditable="true" spellcheck="false" ${ENTER_BLUR}
+                onblur="updateVendorName(${idx}, this.innerText)">${escapeHtml(v.name)}</div>
+              <div class="vendor-meta">
+                <input type="text" class="cat-input" list="vendor-categories" value="${escapeHtml(v.category)}" placeholder="분류"
+                  aria-label="분류" onchange="updateVendor(${idx}, 'category', this.value.trim(), true)">
+                ${when}
+                · <button class="btn-text" onclick="deleteVendor(${idx})">삭제</button>
+              </div>
+            </div>
+            <button class="chev" onclick="toggleCollapse('${key}')" aria-label="접기/펼치기">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+          </div>
+          <div class="group-body">
+            <div class="field-grid">
+              ${vendorField(idx, 'date', '날짜', 'date', '')}
+              ${vendorField(idx, 'time', '시간', 'time', '')}
+              ${vendorField(idx, 'place', '장소', 'text', '주소, 층, 홀 이름 등')}
+              ${vendorField(idx, 'contact', '담당자', 'text', '이름 · 연락처')}
+              ${vendorField(idx, 'cost', '금액', 'text', '총액, 계약금, 잔금 등')}
+              <label class="top" for="v-${v.id}-memo">메모</label>
+              <textarea class="memo" id="v-${v.id}-memo" placeholder="계약 조건, 포함 사항, 챙길 것 등"
+                oninput="autoGrow(this); updateVendor(${idx}, 'memo', this.value)">${escapeHtml(v.memo)}</textarea>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+    container.querySelectorAll('textarea.memo').forEach(autoGrow);
+  }
+
+  function addVendor() {
+    const catEl = document.getElementById('new-vendor-category');
+    const nameEl = document.getElementById('new-vendor-name');
+    const name = nameEl.value.trim();
+    const category = catEl.value.trim();
+    if (!name && !category) { showToast("업체 이름이나 분류를 입력해주세요"); return; }
+    const vendor = { id: Date.now() };
+    VENDOR_FIELDS.forEach(f => vendor[f] = "");
+    vendor.category = category;
+    vendor.name = name || category;
+    appData.vendors.push(vendor);
+    catEl.value = ""; nameEl.value = "";
+    renderVendors(); autoSave();
+    document.getElementById(`v-${vendor.id}-date`).focus();
+    showToast("업체를 추가했어요. 날짜·시간·장소를 채워주세요");
+  }
+  // 날짜·시간·분류가 바뀌면 순서와 '다가오는 일정'도 다시 그림
+  function updateVendor(idx, field, value, rerender) {
+    if (appData.vendors[idx][field] === value) return;
+    appData.vendors[idx][field] = value;
+    if (rerender) { renderVendors(); renderChecklist(); }
+    autoSave();
+  }
+  function updateVendorName(idx, newName) {
+    const name = newName.trim();
+    if (!name || name === appData.vendors[idx].name) return;
+    appData.vendors[idx].name = name;
+    renderChecklist(); autoSave();
+  }
+  async function deleteVendor(idx) {
+    if (await askConfirm(`'${appData.vendors[idx].name}' 업체를 삭제할까요?\n적어둔 내용이 모두 사라져요.`)) {
+      appData.vendors.splice(idx, 1);
+      renderVendors(); renderChecklist(); autoSave();
+    }
   }
 
   function addNote() {
@@ -1249,5 +1420,6 @@
     document.querySelectorAll('.tab-content').forEach(el => el.classList.toggle('active', el.id === `tab-${tabId}`));
     document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tabId));
     window.scrollTo({ top: 0 });
+    document.querySelectorAll(`#tab-${tabId} textarea.memo`).forEach(autoGrow);
   }
 </script>

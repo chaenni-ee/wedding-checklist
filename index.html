@@ -29,7 +29,7 @@
   body {
     margin: 0; background: var(--bg); color: var(--ink);
     font-family: var(--font-body);
-    -webkit-font-smoothing: antialiased; padding-bottom: 120px;
+    -webkit-font-smoothing: antialiased; padding-bottom: 170px;
     -webkit-tap-highlight-color: transparent;
   }
   button { font-family: inherit; color: inherit; }
@@ -44,7 +44,7 @@
   .hero::before { width: 220px; height: 220px; top: -90px; right: -60px; }
   .hero::after { width: 140px; height: 140px; bottom: -40px; left: -50px; }
   .hero > * { position: relative; }
-  .hero-eyebrow { font-size: 0.68rem; letter-spacing: 0.35em; color: var(--rose-deep); font-weight: 500; }
+  .hero-eyebrow { font-size: 0.68rem; letter-spacing: 0.22em; color: var(--rose-deep); font-weight: 500; text-wrap: balance; }
   .hero-dday { font-family: var(--font-display); font-size: 3.2rem; font-weight: 700; margin: 8px 0 4px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .hero-date { font-size: 0.9rem; color: #7d706b; }
   .hero-stats { display: flex; gap: 10px; justify-content: center; margin-top: 22px; flex-wrap: wrap; }
@@ -260,6 +260,31 @@
   #dialog { position: fixed; inset: 0; z-index: 500; background: rgba(61,53,51,0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
   [hidden] { display: none !important; }
 
+  /* 오른쪽 아래 + 버튼 */
+  .fab {
+    position: fixed; z-index: 210; width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+    right: max(18px, calc(50% - 300px + 18px), env(safe-area-inset-right, 0px));
+    bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+    background: var(--rose-deep); color: #fff; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 22px rgba(176,106,106,0.4);
+  }
+  .fab:active { transform: scale(0.94); }
+
+  /* 아래에서 올라오는 추가 창 */
+  .sheet-backdrop { position: fixed; inset: 0; z-index: 450; background: rgba(61,53,51,0.35); display: flex; align-items: flex-end; justify-content: center; }
+  .sheet-card {
+    width: 100%; max-width: 600px; background: #fff; border-radius: 24px 24px 0 0;
+    padding: 22px 18px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px;
+    animation: sheetUp 0.22s ease;
+  }
+  @keyframes sheetUp { from { transform: translateY(30px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+  .sheet-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; }
+  .sheet-label { font-size: 0.78rem; color: var(--muted); margin: 4px 2px -4px; }
+  .sheet-card .hint { margin: 0 2px; }
+  .sheet-card .dialog-actions { margin-top: 6px; }
+  .sheet-cancel { background: var(--bg); color: var(--muted); }
+  .sheet-ok { background: var(--rose-deep); color: #fff; font-weight: 500; }
+
   /* 비밀번호 입력 */
   #login { position: fixed; inset: 0; z-index: 998; background: linear-gradient(165deg, #F3D5CE 0%, #F9E9E3 50%, var(--bg) 100%); display: flex; align-items: center; justify-content: center; padding: 16px; }
   .login-card { background: #fff; border-radius: 24px; padding: 28px 22px 22px; width: 100%; max-width: 340px; text-align: center; box-shadow: 0 20px 50px rgba(61,53,51,0.12); }
@@ -290,6 +315,34 @@
 </div>
 <div id="save-status" class="hide"></div>
 <div id="toast"></div>
+<button id="fab" class="fab" hidden onclick="openSheet()" aria-label="새로 추가">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<div id="sheet" class="sheet-backdrop" hidden onclick="if(event.target===this) closeSheet()">
+  <form id="sheet-note" class="sheet-card" hidden onsubmit="event.preventDefault(); addNote();">
+    <div class="sheet-title">새 메모</div>
+    <input type="text" id="new-note-title" placeholder="제목 (예: 식장 뷔페 시식)" aria-label="메모 제목">
+    <label class="sheet-label" for="new-note-date">날짜 (선택)</label>
+    <input type="date" id="new-note-date">
+    <p class="hint">날짜를 넣으면 체크리스트 탭의 '다가오는 일정'에도 보여요.</p>
+    <div class="dialog-actions">
+      <button type="button" class="sheet-cancel" onclick="closeSheet()">취소</button>
+      <button type="submit" class="sheet-ok">만들기</button>
+    </div>
+  </form>
+  <form id="sheet-vendor" class="sheet-card" hidden onsubmit="event.preventDefault(); addVendor();">
+    <div class="sheet-title">준비 현황 추가</div>
+    <input type="text" id="new-vendor-category" list="vendor-categories" placeholder="분류 (예: 식장, 스튜디오)" aria-label="분류">
+    <input type="text" id="new-vendor-name" placeholder="업체 이름" aria-label="업체 이름">
+    <p class="hint">추가한 뒤 날짜·시간·장소를 채우면 돼요.</p>
+    <div class="dialog-actions">
+      <button type="button" class="sheet-cancel" onclick="closeSheet()">취소</button>
+      <button type="submit" class="sheet-ok">추가</button>
+    </div>
+  </form>
+</div>
+
 <div id="dialog" hidden>
   <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-msg">
     <p id="dialog-msg"></p>
@@ -301,7 +354,7 @@
 </div>
 
 <header class="hero">
-  <div class="hero-eyebrow">OUR WEDDING DAY</div>
+  <div class="hero-eyebrow">JAEHOON &amp; CHAEWON'S WEDDING DAY</div>
   <div class="hero-dday" id="hero-dday">D-?</div>
   <div class="hero-date" id="hero-date"></div>
   <div class="hero-stats">
@@ -348,35 +401,11 @@
 
   <div id="tab-notes" class="tab-content">
     <div class="section-label">메모</div>
-    <div class="card">
-      <div class="card-title">새 메모</div>
-      <div class="card-sub">물어볼 것, 챙길 것을 적어두고 그때그때 체크하세요</div>
-      <div class="add-row">
-        <input type="text" id="new-note-title" placeholder="예: 식장 뷔페 시식 때 물어볼 것"
-          onkeydown="if(event.key==='Enter' && !event.isComposing) addNote()">
-      </div>
-      <div class="add-row">
-        <input type="date" id="new-note-date" aria-label="날짜 (선택)">
-        <button class="btn-add" onclick="addNote()">만들기</button>
-      </div>
-      <p class="hint">날짜는 비워둬도 돼요. 날짜를 넣으면 체크리스트 탭의 '다가오는 일정'에도 보여요.</p>
-    </div>
     <div id="notes-container"></div>
   </div>
 
   <div id="tab-vendors" class="tab-content">
-    <div class="section-label">업체 · 예약</div>
-    <div class="card">
-      <div class="card-title">업체 추가</div>
-      <div class="card-sub">계약했거나 예약한 곳을 날짜·시간·장소와 함께 모아두세요</div>
-      <div class="add-row">
-        <input type="text" id="new-vendor-category" list="vendor-categories" placeholder="분류 (예: 식장)" style="flex:0 1 38%;">
-        <input type="text" id="new-vendor-name" placeholder="업체 이름"
-          onkeydown="if(event.key==='Enter' && !event.isComposing) addVendor()">
-      </div>
-      <div class="add-row">
-        <button class="btn-add" style="flex:1;" onclick="addVendor()">추가</button>
-      </div>
+    <div class="section-label">준비 현황</div>
       <datalist id="vendor-categories">
         <option value="식장"><option value="스튜디오"><option value="드레스"><option value="메이크업">
         <option value="본식 스냅"><option value="본식 DVD"><option value="예복"><option value="한복">
@@ -384,7 +413,6 @@
         <option value="예물"><option value="사회자"><option value="축가"><option value="전세버스">
         <option value="신혼여행"><option value="상견례"><option value="플래너">
       </datalist>
-    </div>
     <div id="vendors-container"></div>
   </div>
 
@@ -441,7 +469,7 @@
   </button>
   <button class="nav-item" data-tab="vendors" onclick="switchTab('vendors')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M3 10l2-6h14l2 6M9 21v-6h6v6"/></svg>
-    <span>업체</span>
+    <span>준비 현황</span>
   </button>
   <button class="nav-item" data-tab="dayof" onclick="switchTab('dayof')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/></svg>
@@ -993,7 +1021,7 @@
     const container = document.getElementById('notes-container');
     const list = sortedNotes();
     if (list.length === 0) {
-      container.innerHTML = `<div class="card"><div class="empty">아직 메모가 없어요. 위에서 첫 메모를 만들어보세요.</div></div>`;
+      container.innerHTML = `<div class="card"><div class="empty">아직 메모가 없어요. 오른쪽 아래 + 버튼으로 첫 메모를 만들어보세요.</div></div>`;
       return;
     }
     container.innerHTML = list.map(({ n, idx }) => {
@@ -1028,7 +1056,7 @@
           </div>
           ${total ? `<div class="mini-progress"><div style="width:${done / total * 100}%"></div></div>` : ''}
           <div class="group-body">
-            <div class="sub-label">✅ 물어볼 것 · 할 일</div>
+            <div class="sub-label">✅ 체크리스트</div>
             <div class="item-list" data-kind="note" data-group="${idx}">${items}</div>
             ${items ? '' : '<div class="empty">물어볼 것이나 할 일을 추가해보세요</div>'}
             <div class="add-row">
@@ -1036,7 +1064,7 @@
                 onkeydown="if(event.key==='Enter' && !event.isComposing) addNoteItem(${idx})">
               <button class="btn-add" onclick="addNoteItem(${idx})">추가</button>
             </div>
-            <div class="sub-label" style="margin-top:18px;">📝 기록 · 들은 내용</div>
+            <div class="sub-label" style="margin-top:18px;">📝 기록</div>
             <textarea class="memo record" id="note-memo-${n.id}" placeholder="들은 답변, 금액, 담당자 이름·연락처, 느낀 점 등을 자유롭게 적어두세요"
               oninput="autoGrow(this); updateNoteMemo(${idx}, this.value)">${escapeHtml(n.memo)}</textarea>
             <label class="note-date-input">날짜
@@ -1082,7 +1110,7 @@
     const container = document.getElementById('vendors-container');
     const list = sortedVendors();
     if (list.length === 0) {
-      container.innerHTML = `<div class="card"><div class="empty">아직 등록한 업체가 없어요. 위에서 식장부터 추가해보세요.</div></div>`;
+      container.innerHTML = `<div class="card"><div class="empty">아직 등록한 곳이 없어요. 오른쪽 아래 + 버튼으로 식장부터 추가해보세요.</div></div>`;
       return;
     }
     container.innerHTML = list.map(({ v, idx }) => {
@@ -1142,8 +1170,9 @@
     vendor.name = name || category;
     appData.vendors.push(vendor);
     catEl.value = ""; nameEl.value = "";
+    closeSheet();
     renderVendors(); autoSave();
-    document.getElementById(`v-${vendor.id}-date`).focus();
+    document.getElementById(`card-v${vendor.id}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
     showToast("업체를 추가했어요. 날짜·시간·장소를 채워주세요");
   }
   // 날짜·시간·분류가 바뀌면 순서와 '다가오는 일정'도 다시 그림
@@ -1174,10 +1203,28 @@
     const note = { id: Date.now(), title, date: dateEl.value || "", memo: "", items: [] };
     appData.notes.push(note);
     titleEl.value = ""; dateEl.value = "";
+    closeSheet();
     renderNotes(); renderChecklist(); autoSave();
-    document.getElementById(`note-input-${note.id}`).focus();
+    document.getElementById(`card-n${note.id}`).scrollIntoView({ behavior: 'smooth', block: 'start' });
     showToast("메모를 만들었어요");
   }
+
+  // --- + 버튼과 추가 창 ---
+  let currentTab = 'checklist';
+  function openSheet() {
+    const form = currentTab === 'vendors' ? 'sheet-vendor' : 'sheet-note';
+    document.getElementById('sheet-note').hidden = form !== 'sheet-note';
+    document.getElementById('sheet-vendor').hidden = form !== 'sheet-vendor';
+    document.getElementById('sheet').hidden = false;
+    document.querySelector(`#${form} input`).focus();
+  }
+  function closeSheet() {
+    document.getElementById('sheet').hidden = true;
+    if (document.activeElement) document.activeElement.blur();
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !document.getElementById('sheet').hidden) closeSheet();
+  });
   function updateNoteTitle(idx, newTitle) {
     const title = newTitle.trim();
     if (!title || title === appData.notes[idx].title) return;
@@ -1421,5 +1468,7 @@
     document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tabId));
     window.scrollTo({ top: 0 });
     document.querySelectorAll(`#tab-${tabId} textarea.memo`).forEach(autoGrow);
+    currentTab = tabId;
+    document.getElementById('fab').hidden = !(tabId === 'notes' || tabId === 'vendors');
   }
 </script>

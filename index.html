@@ -453,12 +453,12 @@
   // 접힌 카드 (저장하지 않음, 화면에서만 사용). 처음엔 모두 펼친 상태
   const collapsed = new Set();
 
-  // --- 저장소 연결 (구글 시트 + 앱스크립트) ---
-  const API_URL = "APPS_SCRIPT_URL";
+  // --- 저장소 연결 (Vercel 서버의 /api/state) ---
+  const API_URL = "/api/state";
   const KEY_STORAGE = "wedding-key";
   const POLL_MS = 15000;
   let apiKey = "";
-  let version = 0;
+  let version = "";
   let firstLoad = true;
   let pendingRemote = null;
 

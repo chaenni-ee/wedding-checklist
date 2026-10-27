@@ -43,25 +43,37 @@
   .hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255,255,255,0.35); }
   .hero::before { width: 220px; height: 220px; top: -90px; right: -60px; }
   .hero::after { width: 140px; height: 140px; bottom: -40px; left: -50px; }
-  .hero > * { position: relative; }
+  /* 장식 원은 항상 글자 뒤로 (안 그러면 ::after 원이 숫자 카드 위에 덮여 숫자 가장자리가 지워져 보임) */
+  .hero::before, .hero::after { z-index: 0; }
+  .hero > * { position: relative; z-index: 1; }
   .hero-eyebrow { font-size: 0.68rem; letter-spacing: 0.22em; color: var(--rose-deep); font-weight: 500; text-wrap: balance; }
   .hero-dday { font-family: var(--font-display); font-size: 3.2rem; font-weight: 700; margin: 8px 0 4px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .hero-date { font-size: 0.9rem; color: #7d706b; }
-  .hero-stats { display: flex; gap: 10px; justify-content: center; margin-top: 22px; flex-wrap: wrap; }
+  .hero-stats { display: flex; gap: 10px; justify-content: center; margin: 22px auto 0; max-width: 300px; }
+  /* 좁은 화면에서도 두 카드가 화면 안에 나란히 들어가게 */
   .stat {
-    background: rgba(255,255,255,0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.9); border-radius: 16px; padding: 10px 18px; min-width: 120px;
+    flex: 1 1 0; min-width: 0;
+    background: rgba(255,255,255,0.8);
+    border: 1px solid rgba(255,255,255,0.9); border-radius: 16px; padding: 10px 8px;
   }
-  .stat b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-  .stat span { font-size: 0.72rem; color: var(--muted); }
+  .stat b { display: block; font-size: 1.15rem; line-height: 1.4; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stat span { display: block; font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
 
   /* 저장 상태 */
   #save-status {
-    position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; z-index: 300;
+    position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 74px; z-index: 300;
     background: rgba(255,255,255,0.92); border: 1px solid var(--line); border-radius: 20px;
     padding: 5px 11px; font-size: 0.72rem; color: var(--muted); transition: opacity 0.4s;
-    box-shadow: 0 2px 8px rgba(61,53,51,0.06); max-width: calc(100% - 24px);
+    box-shadow: 0 2px 8px rgba(61,53,51,0.06); max-width: calc(100% - 86px);
   }
+  /* 자동 저장이 안 될 때를 위한 수동 저장 버튼 (저장 상태 표시 오른쪽) */
+  #save-btn {
+    position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: 12px; z-index: 300;
+    background: var(--rose-deep); color: #fff; border: none; border-radius: 20px;
+    padding: 7px 14px; font-size: 0.78rem; font-weight: 500; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(61,53,51,0.12);
+  }
+  #save-btn:active { transform: scale(0.95); }
   #save-status.hide { opacity: 0; }
   #save-status.error { color: #b23b2e; border-color: #f3c6c0; cursor: pointer; opacity: 1; }
 
@@ -328,6 +340,7 @@
   </form>
 </div>
 <div id="save-status" class="hide"></div>
+<button id="save-btn" onclick="manualSave()">저장</button>
 <div id="toast"></div>
 <button id="fab" class="fab" hidden onclick="openSheet()" aria-label="새로 추가">
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -581,7 +594,10 @@
   function storeKey(k) { try { localStorage.setItem(KEY_STORAGE, k); } catch (e) {} }
 
   async function api(body) {
-    const res = await fetch(API_URL, { method: "POST", body: JSON.stringify({ ...body, key: apiKey }) });
+    const payload = JSON.stringify({ ...body, key: apiKey });
+    // keepalive: 휴대폰에서 다른 앱으로 넘어가도 보내던 저장은 끝까지 보냄 (브라우저 제한이 64KB라 그보다 작을 때만)
+    const keepalive = body.action === "save" && new Blob([payload]).size < 60000;
+    const res = await fetch(API_URL, { method: "POST", keepalive, body: payload });
     return res.json();
   }
 
@@ -777,10 +793,12 @@
   async function poll() {
     if (polling || firstLoad || document.visibilityState !== 'visible') return;
     polling = true;
+    const seqAtStart = saveSeq;
     try {
       const res = await api({ action: "get" });
       if (!res.ok || res.version === version) return;
-      if (saving || autoSaveTimer) return;
+      // 확인하는 사이에 저장했으면 이 응답은 저장 전 내용이라 버림
+      if (saving || autoSaveTimer || saveSeq !== seqAtStart) return;
       if (isEditing()) { pendingRemote = res; return; }
       applyRemote(res);
     } catch (e) {
@@ -796,6 +814,8 @@
   let autoSaveTimer = null;
   let saving = false;
   let saveAgain = false;
+  let saveSeq = 0;
+  let retryTimer = null;
 
   function setSaveStatus(text, cls) {
     const el = document.getElementById('save-status');
@@ -812,6 +832,10 @@
     if (firstLoad) return;
     if (saving) { saveAgain = true; return; }
     saving = true;
+    saveSeq++;
+    // 입력 중에 받아둔 상대방 내용은 이 저장보다 오래된 것
+    pendingRemote = null;
+    clearTimeout(retryTimer);
     setSaveStatus("저장 중…");
     try {
       const res = await api({ action: "save", baseVersion: version, data: appData });
@@ -831,15 +855,40 @@
         setSaveStatus("비밀번호가 바뀌었어요 · 새로고침해서 다시 입력해주세요", "error");
         storeKey("");
       } else {
-        setSaveStatus("⚠ 저장 실패 · 눌러서 다시 시도", "error");
+        saveFailed();
       }
     } catch (e) {
-      setSaveStatus("⚠ 저장 실패 · 눌러서 다시 시도", "error");
+      saveFailed();
     } finally {
       saving = false;
       if (saveAgain) { saveAgain = false; saveNow(); }
     }
   }
+
+  // '저장' 버튼: 기다리던 자동 저장을 바로 보냄 (저장 중이면 끝난 뒤 한 번 더)
+  function manualSave() {
+    clearTimeout(autoSaveTimer); autoSaveTimer = null;
+    saveNow();
+  }
+
+  // 잠깐 끊긴 경우가 많아서 몇 초 뒤 알아서 다시 저장
+  function saveFailed() {
+    setSaveStatus("⚠ 저장 실패 · 눌러서 다시 시도", "error");
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(saveNow, 5000);
+  }
+  function hasUnsaved() {
+    return autoSaveTimer || document.getElementById('save-status').classList.contains('error');
+  }
+  // 다른 앱으로 넘어가기 전에 기다리던 저장을 바로 보냄
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && autoSaveTimer) {
+      clearTimeout(autoSaveTimer); autoSaveTimer = null; saveNow();
+    } else if (document.visibilityState === 'visible' && hasUnsaved() && !saving) {
+      saveNow();
+    }
+  });
+  window.addEventListener('online', () => { if (hasUnsaved() && !saving) saveNow(); });
 
   function renderAll() {
     renderHeader();

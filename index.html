@@ -203,18 +203,21 @@
   textarea.memo.record { min-height: 150px; background: #FFFDF8; border-color: #F1E6D6; overflow: hidden; }
   textarea.memo.record:focus { background: #fff; }
 
-  /* 업체 */
-  .field-grid { display: grid; grid-template-columns: 76px 1fr; gap: 8px 10px; align-items: center; margin-top: 12px; }
-  .field-grid > label { font-size: 0.78rem; color: var(--muted); }
-  .field-grid input { padding: 9px 12px; font-size: 0.88rem; width: 100%; }
-  .field-grid textarea.memo { margin-top: 0; min-height: 60px; overflow: hidden; }
-  .field-grid .top { align-self: start; padding-top: 10px; }
-  input.cat-input {
-    flex: 0 1 auto; width: 7.5em; padding: 3px 10px; border-radius: 10px; border: 1px solid transparent;
-    background: var(--rose-soft); color: var(--rose-deep); font-size: 0.75rem; font-weight: 500;
-  }
-  input.cat-input:focus { border-color: var(--rose); background: #fff; }
-  .vendor-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; font-size: 0.75rem; color: var(--muted); }
+  /* 준비 현황 */
+  .prep-summary { font-size: 0.8rem; color: var(--muted); margin: -2px 2px 10px; }
+  .prep-summary b { color: var(--rose-deep); }
+  .prep-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .prep-row:first-child { padding-top: 2px; }
+  .prep-row:last-child { border-bottom: none; padding-bottom: 2px; }
+  .prep-line { display: flex; align-items: center; gap: 10px; }
+  .prep-line .emoji-btn { width: 38px; height: 38px; border-radius: 12px; font-size: 1.2rem; }
+  .prep-cat { width: 6.2em; flex-shrink: 0; font-size: 0.86rem; font-weight: 500; line-height: 1.3; word-break: keep-all; }
+  .prep-line input.prep-name { flex: 1; min-width: 0; padding: 9px 12px; font-size: 0.88rem; }
+  .prep-row.todo input.prep-name { border-style: dashed; background: #FFFDFB; }
+  .prep-row.todo .prep-cat { color: var(--muted); }
+  .prep-row.todo .emoji-btn { opacity: 0.55; }
+  .prep-del { flex-shrink: 0; font-size: 1rem; padding: 4px 2px; }
+  .prep-row textarea.memo { margin-top: 8px; min-height: 38px; padding: 8px 12px; font-size: 0.82rem; overflow: hidden; }
   .event-time { color: var(--muted); font-size: 0.78rem; }
   .emoji-btn {
     width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; border: 1px solid var(--line);
@@ -342,10 +345,10 @@
     </div>
   </form>
   <form id="sheet-vendor" class="sheet-card" hidden onsubmit="event.preventDefault(); addVendor();">
-    <div class="sheet-title">준비 현황 추가</div>
-    <input type="text" id="new-vendor-category" list="vendor-categories" placeholder="분류 (예: 식장, 스튜디오)" aria-label="분류">
-    <input type="text" id="new-vendor-name" placeholder="업체 이름" aria-label="업체 이름">
-    <p class="hint">추가한 뒤 날짜와 예약금·잔금을 채우면 돼요. 이모지는 분류에 맞게 자동으로 붙고, 카드에서 눌러 바꿀 수 있어요.</p>
+    <div class="sheet-title">준비 항목 추가</div>
+    <input type="text" id="new-vendor-category" list="vendor-categories" placeholder="항목 (예: 웨딩슈즈, 헬퍼)" aria-label="항목">
+    <input type="text" id="new-vendor-name" placeholder="업체명 (아직 없으면 비워두세요)" aria-label="업체명">
+    <p class="hint">업체명이 비어 있으면 아직 준비 안 된 항목으로 보여요. 이모지는 눌러서 바꿀 수 있어요.</p>
     <div class="dialog-actions">
       <button type="button" class="sheet-cancel" onclick="closeSheet()">취소</button>
       <button type="submit" class="sheet-ok">추가</button>
@@ -423,6 +426,7 @@
 
   <div id="tab-vendors" class="tab-content">
     <div class="section-label">준비 현황</div>
+    <div id="prep-summary" class="prep-summary"></div>
       <datalist id="vendor-categories">
         <option value="식장"><option value="스튜디오"><option value="드레스 · 메이크업">
         <option value="본식 스냅"><option value="본식 DVD"><option value="예복"><option value="한복">
@@ -538,8 +542,11 @@
   // 당일 준비물 구분별 색상
   const dayOfColors = ["#E8A5A5", "#D9B3DE", "#EBC598", "#A9C7AE", "#9FBFE0", "#E6B9C9"];
 
-  // 업체 한 곳에 저장하는 칸
-  const VENDOR_FIELDS = ["emoji", "category", "name", "date", "contact", "deposit", "balance", "memo"];
+  // 준비 항목 하나에 저장하는 칸 (업체명이 비어 있으면 아직 준비 안 된 것)
+  const VENDOR_FIELDS = ["emoji", "category", "name", "memo"];
+  // 처음에 깔아두는 준비 항목 (분류 추천 목록과 같은 순서)
+  const DEFAULT_CATEGORIES = ["식장", "스튜디오", "드레스 · 메이크업", "본식 스냅", "본식 DVD", "예복", "한복",
+    "혼주 메이크업", "혼주 예복", "부케", "청첩장", "예물", "사회자", "축가", "전세버스", "신혼여행", "상견례", "플래너"];
 
   // 분류에 맞는 기본 이모지 (직접 고르면 그게 우선)
   const CATEGORY_EMOJI = [
@@ -587,14 +594,29 @@
     data.notes.forEach(n => { if (!Array.isArray(n.items)) n.items = []; if (typeof n.memo !== 'string') n.memo = ""; if (!n.date) n.date = ""; });
     if (!Array.isArray(data.vendors)) data.vendors = [];
     data.vendors.forEach(v => {
-      // 예전 칸(장소·시간·금액)에 적은 내용은 메모로 옮김
-      const moved = [["place", "장소"], ["time", "시간"], ["cost", "금액"]]
+      // 예전 칸(장소·시간·금액·날짜·담당자·예약금·잔금)에 적은 내용은 메모로 옮김
+      const old = [["place", "장소"], ["time", "시간"], ["cost", "금액"],
+        ["date", "날짜"], ["contact", "담당자"], ["deposit", "예약금"], ["balance", "잔금"]];
+      const moved = old
         .filter(([f]) => typeof v[f] === 'string' && v[f].trim())
         .map(([f, label]) => `${label}: ${v[f].trim()}`);
       if (moved.length) v.memo = [moved.join('\n'), v.memo].filter(Boolean).join('\n');
-      delete v.place; delete v.time; delete v.cost;
+      old.forEach(([f]) => delete v[f]);
       VENDOR_FIELDS.forEach(f => { if (typeof v[f] !== 'string') v[f] = ""; });
+      // 예전엔 분류 없이 업체 이름만 적을 수 있었음
+      if (!v.category) { v.category = v.name; v.name = ""; }
     });
+    // 기본 준비 항목은 한 번만 깔아둠 (지운 항목이 다시 생기지 않게). 이미 적어둔 업체는 그 자리에 들어감
+    if (!data.vendorsSeeded) {
+      const rest = data.vendors.slice();
+      const seeded = DEFAULT_CATEGORIES.map((category, i) => {
+        const at = rest.findIndex(v => v.category === category);
+        if (at >= 0) return rest.splice(at, 1)[0];
+        return { id: Date.now() + i, emoji: "", category, name: "", memo: "" };
+      });
+      data.vendors = seeded.concat(rest);
+      data.vendorsSeeded = true;
+    }
     data.phases.forEach(p => { if (!Array.isArray(p.checklist)) p.checklist = []; if (!Array.isArray(p.timeline)) p.timeline = []; });
     // 당일 준비물이 없으면 기본값 추가
     if (!data.dayOf || !Array.isArray(data.dayOf.sections)) data.dayOf = JSON.parse(JSON.stringify(defaultDayOf));
@@ -1102,74 +1124,33 @@
     el.style.height = el.scrollHeight + 2 + 'px';
   }
 
-  // --- 업체 탭 ---
-  // 날짜 있는 업체는 날짜순, 날짜 없는 업체는 뒤에 추가한 순서대로
-  function sortedVendors() {
-    return appData.vendors
-      .map((v, idx) => ({ v, idx }))
-      .sort((a, b) => {
-        if (!!a.v.date !== !!b.v.date) return a.v.date ? -1 : 1;
-        if (a.v.date && a.v.date !== b.v.date) return parseDate(a.v.date) - parseDate(b.v.date);
-        return a.v.id - b.v.id;
-      });
-  }
-
-  function vendorField(idx, field, label, type, placeholder) {
-    const v = appData.vendors[idx];
-    return `
-      <label for="v-${v.id}-${field}">${label}</label>
-      <input type="${type}" id="v-${v.id}-${field}" value="${escapeHtml(v[field])}" placeholder="${placeholder}"
-        ${type === 'date'
-          ? `onchange="updateVendor(${idx}, '${field}', this.value, true)"`
-          : `oninput="updateVendor(${idx}, '${field}', this.value)"`}>`;
+  // --- 준비 현황 탭 ---
+  function renderPrepSummary() {
+    const vendors = appData.vendors;
+    const done = vendors.filter(v => v.name.trim()).length;
+    document.getElementById('prep-summary').innerHTML = vendors.length
+      ? `${vendors.length}개 중 <b>${done}개</b> 업체 정함 · 남은 항목 ${vendors.length - done}개` : "";
   }
 
   function renderVendors() {
     const container = document.getElementById('vendors-container');
-    const list = sortedVendors();
-    if (list.length === 0) {
-      container.innerHTML = `<div class="card"><div class="empty">아직 등록한 곳이 없어요. 오른쪽 아래 + 버튼으로 식장부터 추가해보세요.</div></div>`;
+    renderPrepSummary();
+    if (appData.vendors.length === 0) {
+      container.innerHTML = `<div class="card"><div class="empty">준비 항목이 없어요. 오른쪽 아래 + 버튼으로 추가해보세요.</div></div>`;
       return;
     }
-    container.innerHTML = list.map(({ v, idx }) => {
-      const key = 'v' + v.id;
-      let when = "";
-      if (v.date) {
-        const diff = daysUntil(v.date);
-        const d = parseDate(v.date);
-        when = `<span class="note-date-pill ${diff < 0 ? 'past' : ''}">${d.getMonth() + 1}/${d.getDate()} · ${ddayText(diff)}</span>`;
-      }
-      return `
-        <div class="card ${collapsed.has(key) ? 'collapsed' : ''}" id="card-${key}" style="--accent:#C9A78C">
-          <div class="group-head">
-            <button class="emoji-btn" onclick="openEmojiPicker(${idx})" aria-label="이모지 바꾸기" title="이모지 바꾸기">${vendorEmoji(v)}</button>
-            <div class="group-titles">
-              <div class="card-title editable" contenteditable="true" spellcheck="false" ${ENTER_BLUR}
-                onblur="updateVendorName(${idx}, this.innerText)">${escapeHtml(v.name)}</div>
-              <div class="vendor-meta">
-                <input type="text" class="cat-input" list="vendor-categories" value="${escapeHtml(v.category)}" placeholder="분류"
-                  aria-label="분류" onchange="updateVendor(${idx}, 'category', this.value.trim(), true)">
-                ${when}
-                · <button class="btn-text" onclick="deleteVendor(${idx})">삭제</button>
-              </div>
-            </div>
-            <button class="chev" onclick="toggleCollapse('${key}')" aria-label="접기/펼치기">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-          </div>
-          <div class="group-body">
-            <div class="field-grid">
-              ${vendorField(idx, 'date', '날짜', 'date', '')}
-              ${vendorField(idx, 'contact', '담당자', 'text', '이름 · 연락처')}
-              ${vendorField(idx, 'deposit', '예약금', 'text', '예: 50만원 (10/1 입금)')}
-              ${vendorField(idx, 'balance', '잔금', 'text', '예: 150만원 (당일 현금)')}
-              <label class="top" for="v-${v.id}-memo">메모</label>
-              <textarea class="memo" id="v-${v.id}-memo" placeholder="장소, 시간, 계약 조건, 포함 사항 등"
-                oninput="autoGrow(this); updateVendor(${idx}, 'memo', this.value)">${escapeHtml(v.memo)}</textarea>
-            </div>
-          </div>
-        </div>`;
-    }).join('');
+    container.innerHTML = `<div class="card">${appData.vendors.map((v, idx) => `
+      <div class="prep-row ${v.name.trim() ? '' : 'todo'}" id="prep-${v.id}">
+        <div class="prep-line">
+          <button class="emoji-btn" onclick="openEmojiPicker(${idx})" aria-label="이모지 바꾸기" title="이모지 바꾸기">${vendorEmoji(v)}</button>
+          <div class="prep-cat">${escapeHtml(v.category)}</div>
+          <input type="text" class="prep-name" value="${escapeHtml(v.name)}" placeholder="업체명" aria-label="${escapeHtml(v.category)} 업체명"
+            oninput="updateVendorName(${idx}, this)">
+          <button class="btn-text prep-del" onclick="deleteVendor(${idx})" aria-label="항목 삭제" title="항목 삭제">×</button>
+        </div>
+        <textarea class="memo" rows="1" placeholder="메모" aria-label="${escapeHtml(v.category)} 메모"
+          oninput="autoGrow(this); updateVendor(${idx}, 'memo', this.value)">${escapeHtml(v.memo)}</textarea>
+      </div>`).join('')}</div>`;
     container.querySelectorAll('textarea.memo').forEach(autoGrow);
   }
 
@@ -1178,17 +1159,17 @@
     const nameEl = document.getElementById('new-vendor-name');
     const name = nameEl.value.trim();
     const category = catEl.value.trim();
-    if (!name && !category) { showToast("업체 이름이나 분류를 입력해주세요"); return; }
+    if (!category) { showToast("항목 이름을 입력해주세요"); return; }
     const vendor = { id: Date.now() };
     VENDOR_FIELDS.forEach(f => vendor[f] = "");
     vendor.category = category;
-    vendor.name = name || category;
+    vendor.name = name;
     appData.vendors.push(vendor);
     catEl.value = ""; nameEl.value = "";
     closeSheet();
-    renderVendors(); renderChecklist(); autoSave();
-    document.getElementById(`card-v${vendor.id}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
-    showToast("추가했어요. 날짜와 금액을 채워주세요");
+    renderVendors(); autoSave();
+    document.getElementById(`prep-${vendor.id}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast("추가했어요");
   }
 
   // 이모지 고르기
@@ -1208,32 +1189,30 @@
     appData.vendors[emojiTarget].emoji = e;
     emojiTarget = null;
     closeSheet();
-    renderVendors(); renderChecklist(); autoSave();
+    renderVendors(); autoSave();
   }
   function resetEmoji() {
     if (emojiTarget === null) return;
     appData.vendors[emojiTarget].emoji = "";
     emojiTarget = null;
     closeSheet();
-    renderVendors(); renderChecklist(); autoSave();
+    renderVendors(); autoSave();
   }
-  // 날짜·분류가 바뀌면 순서와 이모지도 다시 그림
-  function updateVendor(idx, field, value, rerender) {
+  function updateVendor(idx, field, value) {
     if (appData.vendors[idx][field] === value) return;
     appData.vendors[idx][field] = value;
-    if (rerender) { renderVendors(); renderChecklist(); }
     autoSave();
   }
-  function updateVendorName(idx, newName) {
-    const name = newName.trim();
-    if (!name || name === appData.vendors[idx].name) return;
-    appData.vendors[idx].name = name;
-    renderChecklist(); autoSave();
+  // 업체명을 적거나 지우면 '아직' 표시와 개수만 바로 바꿈 (입력 중인 칸은 그대로 둠)
+  function updateVendorName(idx, input) {
+    updateVendor(idx, 'name', input.value);
+    input.closest('.prep-row').classList.toggle('todo', !input.value.trim());
+    renderPrepSummary();
   }
   async function deleteVendor(idx) {
-    if (await askConfirm(`'${appData.vendors[idx].name}' 업체를 삭제할까요?\n적어둔 내용이 모두 사라져요.`)) {
+    if (await askConfirm(`'${appData.vendors[idx].category}' 항목을 삭제할까요?\n적어둔 업체명과 메모가 사라져요.`)) {
       appData.vendors.splice(idx, 1);
-      renderVendors(); renderChecklist(); autoSave();
+      renderVendors(); autoSave();
     }
   }
 

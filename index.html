@@ -156,7 +156,7 @@
 
   /* 입력 */
   .add-row { display: flex; gap: 8px; margin-top: 12px; }
-  input[type="text"], input[type="date"], input[type="number"] {
+  input[type="text"], input[type="date"], input[type="number"], select {
     flex: 1; min-width: 0; padding: 11px 14px; border: 1px solid var(--line); background: var(--bg);
     border-radius: 12px; font: inherit; font-size: 0.9rem; color: var(--ink); outline: none; transition: 0.15s;
   }
@@ -232,6 +232,32 @@
   .prep-del { flex-shrink: 0; font-size: 1rem; padding: 4px 2px; }
   .prep-row textarea.memo { margin-top: 8px; min-height: 38px; padding: 8px 12px; font-size: 0.82rem; overflow: hidden; }
   .event-time { color: var(--muted); font-size: 0.78rem; }
+
+  /* 예산: 쓴 돈 / 앞으로 낼 돈 / 받을 돈 + 결제 예정 목록 + 접히는 결제 내역 */
+  .budget-totals { display: flex; gap: 8px; }
+  .budget-totals > div { flex: 1 1 0; min-width: 0; background: var(--bg); border-radius: 14px; padding: 10px 6px; text-align: center; }
+  .budget-totals span { display: block; font-size: 0.72rem; color: var(--muted); }
+  .budget-totals b { display: block; font-size: 0.98rem; margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .budget-totals .due { background: #FBE3E0; }
+  .budget-totals .due b { color: #B4544A; }
+  .budget-totals .refund { background: #E3F1E0; }
+  .budget-totals .refund b { color: #4E8A5C; }
+  .budget-note { font-size: 0.72rem; color: var(--muted); margin: 6px 2px 0; text-align: right; }
+  .exp-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .exp-row:last-child { border-bottom: none; }
+  .exp-main { flex: 1; min-width: 0; }
+  .exp-title { font-size: 0.88rem; line-height: 1.35; word-break: keep-all; }
+  .exp-meta { font-size: 0.72rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exp-amount { flex-shrink: 0; font-size: 0.88rem; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .exp-amount.unknown { color: var(--muted); font-weight: 400; font-size: 0.78rem; }
+  .exp-amount.plus { color: #4E8A5C; }
+  .exp-done-btn {
+    flex-shrink: 0; border: 1px solid #A8CFA2; background: #E3F1E0; color: #4E8A5C; border-radius: 10px;
+    padding: 6px 9px; font-size: 0.74rem; font-weight: 500; cursor: pointer;
+  }
+  .exp-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .exp-actions button { flex: 1; }
+  .sheet-row { display: flex; gap: 8px; }
   .emoji-btn {
     width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; border: 1px solid var(--line);
     background: var(--bg); font-size: 1.45rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -368,6 +394,28 @@
       <button type="submit" class="sheet-ok">추가</button>
     </div>
   </form>
+  <form id="sheet-expense" class="sheet-card" hidden onsubmit="event.preventDefault(); saveExpense();">
+    <div class="sheet-title" id="expense-sheet-title">지출 추가</div>
+    <input type="text" id="exp-title" placeholder="항목 (예: 웨딩홀 잔금)" aria-label="항목">
+    <div class="sheet-row">
+      <input type="text" id="exp-amount" inputmode="numeric" placeholder="금액 (원)" aria-label="금액"
+        oninput="this.value = formatAmountInput(this.value)">
+      <input type="date" id="exp-date" aria-label="날짜">
+    </div>
+    <select id="exp-status" aria-label="상태">
+      <option value="pay-done">결제 완료</option>
+      <option value="pay-due">결제 예정</option>
+      <option value="refund-due">받을 돈</option>
+      <option value="refund-done">받은 돈</option>
+    </select>
+    <input type="text" id="exp-memo" placeholder="메모 (선택)" aria-label="메모">
+    <p class="hint">금액을 아직 모르면 비워두세요. 날짜가 없는 결제 예정은 목록 맨 아래에 보여요.</p>
+    <div class="dialog-actions">
+      <button type="button" class="sheet-cancel" id="exp-delete" onclick="deleteExpense()">삭제</button>
+      <button type="button" class="sheet-cancel" onclick="closeSheet()">취소</button>
+      <button type="submit" class="sheet-ok">저장</button>
+    </div>
+  </form>
   <div id="sheet-emoji" class="sheet-card" hidden>
     <div class="sheet-title">이모지 고르기</div>
     <div id="emoji-grid" class="emoji-grid"></div>
@@ -439,6 +487,8 @@
   </div>
 
   <div id="tab-vendors" class="tab-content active">
+    <div class="section-label">예산</div>
+    <div class="card" id="budget-container"></div>
     <div class="section-label">준비 현황</div>
     <div id="prep-summary" class="prep-summary"></div>
       <datalist id="vendor-categories">
@@ -636,6 +686,16 @@
     }
     if (!data.vendorsUpdated1) { applyVendorUpdate1(data.vendors); data.vendorsUpdated1 = true; }
     if (!data.vendorsUpdated2) { applyVendorUpdate2(data.vendors); data.vendorsUpdated2 = true; }
+    if (!Array.isArray(data.expenses)) data.expenses = [];
+    // 예산 표에 적어두던 내역을 한 번만 옮겨옴 (2026-10-27)
+    if (!data.expensesSeeded) { data.expenses = seedExpenses().concat(data.expenses); data.expensesSeeded = true; }
+    data.expenses.forEach(e => {
+      if (typeof e.amount !== 'number' || !isFinite(e.amount)) e.amount = null;
+      delete e.payer;
+      ["title", "date", "memo"].forEach(f => { if (typeof e[f] !== 'string') e[f] = ""; });
+      if (e.kind !== 'refund') e.kind = 'pay';
+      e.done = !!e.done;
+    });
     data.phases.forEach(p => { if (!Array.isArray(p.checklist)) p.checklist = []; if (!Array.isArray(p.timeline)) p.timeline = []; });
     // 당일 준비물이 없으면 기본값 추가
     if (!data.dayOf || !Array.isArray(data.dayOf.sections)) data.dayOf = JSON.parse(JSON.stringify(defaultDayOf));
@@ -697,6 +757,44 @@
     }
   }
 
+  // 예산 표에서 옮겨온 처음 내역: [항목, 금액, 날짜, 종류(pay 낼 돈 / refund 받을 돈), 끝났는지, 메모]
+  function seedExpenses() {
+    return [
+      ["웨딩홀 계약금", 1500000, "2025-10-12", "pay", true, "총 305만원 예상"],
+      ["스드메 계약금 (10%)", 300000, "2026-01-13", "pay", true, "총 211만원 예상"],
+      ["본식 DVD + 아이폰스냅 예약금", 100000, "2026-02-11", "pay", true, "총 46만원 예상"],
+      ["스드메 중도금 (80%)", 1448000, "2026-03-11", "pay", true, ""],
+      ["신랑 예복 (살로토)", 490000, "2026-03-18", "pay", true, ""],
+      ["웨딩촬영 원본 추가금", 440000, "2026-05-23", "pay", true, ""],
+      ["웨딩촬영 헬퍼 추가금", 230000, "2026-05-23", "pay", true, ""],
+      ["웨딩촬영 헤어피스 추가금", 80000, "2026-05-23", "pay", true, ""],
+      ["웨딩촬영 셀렉 추가금", 60000, "2026-06-24", "pay", true, ""],
+      ["신혼여행 항공값", null, "", "pay", true, ""],
+      ["신혼여행 숙소값", null, "", "pay", true, ""],
+      ["채원 가족 인사 선물 (한우+과일)", 370000, "2026-07-27", "pay", true, "7/27~7/28"],
+      ["재훈 가족 인사 선물 (한우+과일)", 350000, "2026-08-19", "pay", true, "8/19, 8/22"],
+      ["신혼여행 시밀란섬 투어", null, "", "pay", true, ""],
+      ["모바일 청첩장 (살롱드레터)", 14900, "2026-09-01", "pay", true, ""],
+      ["종이 청첩장 샘플 8매 구매", 3800, "2026-09-01", "pay", true, ""],
+      ["상견례 식당 예약금", 50000, "2026-09-05", "pay", true, "더함뜰"],
+      ["청첩장 부속품 구매 (봉투+스티커)", 36300, "2026-09-09", "pay", true, ""],
+      ["종이 청첩장 200매 구매", 19362, "2026-09-09", "pay", true, ""],
+      ["본식 사회자 계약금", 30000, "2026-09-09", "pay", true, "총 30만원 (지역 추가 X)"],
+      ["여권사진 촬영", 70000, "2026-09-10", "pay", true, "네이버 이벤트 -10,000?"],
+      ["본식 드레스 추가금", 660000, "2026-10-07", "pay", true, ""],
+      ["혼주 메이크업 (신부측) 예약금", 130000, "2026-10-07", "pay", true, "뷰티조에 부평"],
+      ["혼주 메이크업 (신랑측) 예약금", 150000, "2026-10-13", "pay", true, "에나메이크업, 총 32만원 (당일 17만원 결제)"],
+      ["본식 부케 주문 (신부 부케, 신랑 부토니에, 혼주 코사지)", 190000, "2026-10-18", "pay", true, "부케 9시에 벨라제이로 배송"],
+      ["웨딩홀 잔금", 1550000, "", "pay", false, "총 305만원 - 계약금 150만원"],
+      ["스드메 잔금", 362000, "", "pay", false, "총 211만원 - 계약금·중도금"],
+      ["본식 DVD + 아이폰스냅 잔금", 360000, "", "pay", false, "총 46만원 - 예약금 10만원"],
+      ["본식 사회자 잔금", 270000, "", "pay", false, "총 30만원 - 계약금 3만원"],
+      ["혼주 메이크업 (신랑측) 당일 결제", 170000, "", "pay", false, "에나메이크업, 결혼식 당일"],
+      ["혼주 메이크업 (신부측) 잔금", null, "", "pay", false, "뷰티조에 부평, 총액 미정"],
+      ["살로토 블로그 리뷰·웨딩 사진 페이백", 50000, "", "refund", false, "블로그 리뷰 + 웨딩 사진"]
+    ].map(([title, amount, date, kind, done, memo], i) => ({ id: Date.now() + i, title, amount, date, kind, done, memo }));
+  }
+
   // 키 순서와 무관하게 같은 데이터인지 비교하기 위한 문자열
   function canon(v) {
     return JSON.stringify(v, (k, val) => (val && typeof val === 'object' && !Array.isArray(val))
@@ -720,7 +818,7 @@
       document.getElementById('loading').style.display = 'none';
     }
     renderAll();
-    if (!(remote.data && remote.data.vendorsUpdated2)) autoSave();
+    if (!(remote.data && remote.data.vendorsUpdated2 && remote.data.expensesSeeded)) autoSave();
   }
 
   // 입력 중에 상대방 변경이 오면, 입력을 마친 뒤에 반영
@@ -954,6 +1052,7 @@
     renderChecklist();
     renderDayOf();
     renderVendors();
+    renderBudget();
     renderNotes();
     renderSettings();
   }
@@ -1262,6 +1361,118 @@
     container.querySelectorAll('textarea.memo').forEach(autoGrow);
   }
 
+  // --- 예산 ---
+  let budgetHistoryOpen = false;
+  let editingExpense = null;
+  const won = n => `${n.toLocaleString('ko-KR')}원`;
+  const sumOf = list => list.reduce((s, e) => s + (e.amount || 0), 0);
+
+  function renderBudget() {
+    const list = appData.expenses;
+    const paid = list.filter(e => e.kind === 'pay' && e.done);
+    const due = list.filter(e => e.kind === 'pay' && !e.done);
+    const received = list.filter(e => e.kind === 'refund' && e.done);
+    const toReceive = list.filter(e => e.kind === 'refund' && !e.done);
+    // 쓴 돈은 받은 페이백만큼 뺌
+    const spent = sumOf(paid) - sumOf(received);
+    // 결제 예정은 날짜 가까운 순 (날짜 없는 건 맨 아래), 내역은 최근 순
+    const upcoming = due.concat(toReceive).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+    const history = paid.concat(received).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const unknownDue = due.filter(e => e.amount === null).length;
+
+    const row = e => {
+      const i = list.indexOf(e);
+      const d = e.date ? parseDate(e.date) : null;
+      const when = d ? `${String(d.getFullYear()).slice(2)}.${d.getMonth() + 1}.${d.getDate()}` : (e.done ? '' : '날짜 미정');
+      const meta = [when, e.memo].filter(Boolean).map(escapeHtml).join(' · ');
+      const amount = e.amount === null
+        ? `<div class="exp-amount unknown">금액 미정</div>`
+        : `<div class="exp-amount ${e.kind === 'refund' ? 'plus' : ''}">${e.kind === 'refund' ? '+' : ''}${won(e.amount)}</div>`;
+      const doneBtn = e.done ? '' :
+        `<button class="exp-done-btn" onclick="event.stopPropagation(); completeExpense(${i})">${e.kind === 'refund' ? '받음' : '완료'}</button>`;
+      return `<div class="exp-row" onclick="openExpense(${i})">
+        <div class="exp-main"><div class="exp-title">${escapeHtml(e.title)}</div>${meta ? `<div class="exp-meta">${meta}</div>` : ''}</div>
+        ${amount}${doneBtn}</div>`;
+    };
+
+    document.getElementById('budget-container').innerHTML = `
+      <div class="budget-totals">
+        <div><span>쓴 돈</span><b>${won(spent)}</b></div>
+        <div class="due"><span>앞으로 낼 돈</span><b>${won(sumOf(due))}</b></div>
+        ${toReceive.length ? `<div class="refund"><span>받을 돈</span><b>${won(sumOf(toReceive))}</b></div>` : ''}
+      </div>
+      ${unknownDue ? `<div class="budget-note">금액 미정 ${unknownDue}건은 빼고 계산했어요</div>` : ''}
+      <div class="sub-label">결제 예정 · 받을 돈</div>
+      ${upcoming.length ? upcoming.map(row).join('') : '<div class="empty">남은 결제가 없어요 🎉</div>'}
+      <div class="exp-actions">
+        <button class="btn-ghost" onclick="budgetHistoryOpen = !budgetHistoryOpen; renderBudget()">결제 내역 ${history.length}건 ${budgetHistoryOpen ? '▴' : '▾'}</button>
+        <button class="btn-ghost" onclick="openExpense(null)">+ 지출 추가</button>
+      </div>
+      ${budgetHistoryOpen ? `<div style="margin-top:6px;">${history.map(row).join('')}</div>` : ''}`;
+  }
+
+  // 금액 칸은 숫자만 받고 쉼표를 붙여 보여줌
+  function formatAmountInput(v) {
+    const digits = v.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+    return digits ? Number(digits).toLocaleString('ko-KR') : '';
+  }
+
+  function openExpense(idx) {
+    editingExpense = idx;
+    const e = idx === null ? null : appData.expenses[idx];
+    document.getElementById('expense-sheet-title').textContent = e ? '지출 고치기' : '지출 추가';
+    document.getElementById('exp-title').value = e ? e.title : '';
+    document.getElementById('exp-amount').value = e && e.amount !== null ? e.amount.toLocaleString('ko-KR') : '';
+    document.getElementById('exp-date').value = e ? e.date : '';
+    document.getElementById('exp-status').value = e ? `${e.kind}-${e.done ? 'done' : 'due'}` : 'pay-done';
+    document.getElementById('exp-memo').value = e ? e.memo : '';
+    document.getElementById('exp-delete').hidden = !e;
+    showSheet('sheet-expense');
+    if (!e) document.getElementById('exp-title').focus();
+  }
+
+  function saveExpense() {
+    const title = document.getElementById('exp-title').value.trim();
+    if (!title) { showToast("항목 이름을 입력해주세요"); return; }
+    const digits = document.getElementById('exp-amount').value.replace(/[^0-9]/g, '');
+    const [kind, status] = document.getElementById('exp-status').value.split('-');
+    const fields = {
+      title, amount: digits ? Number(digits) : null, date: document.getElementById('exp-date').value || "",
+      kind, done: status === 'done',
+      memo: document.getElementById('exp-memo').value.trim(),
+    };
+    if (editingExpense === null) appData.expenses.push({ id: Date.now(), ...fields });
+    else Object.assign(appData.expenses[editingExpense], fields);
+    editingExpense = null;
+    closeSheet();
+    renderBudget(); autoSave();
+    showToast("저장했어요");
+  }
+
+  async function deleteExpense() {
+    if (editingExpense === null) return;
+    const e = appData.expenses[editingExpense];
+    editingExpense = null;
+    closeSheet();
+    if (await askConfirm(`'${e.title}' 내역을 삭제할까요?`)) {
+      appData.expenses.splice(appData.expenses.indexOf(e), 1);
+      renderBudget(); autoSave();
+    }
+  }
+
+  // 결제 예정 → 완료 (날짜가 비어 있으면 오늘로)
+  function completeExpense(idx) {
+    const e = appData.expenses[idx];
+    e.done = true;
+    if (!e.date) {
+      const t = new Date(), pad = n => String(n).padStart(2, '0');
+      e.date = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+    }
+    renderBudget(); autoSave();
+    showToast(e.kind === 'refund' ? "받은 돈으로 옮겼어요" : "결제 내역으로 옮겼어요");
+  }
+
+
   function addVendor() {
     const catEl = document.getElementById('new-vendor-category');
     const nameEl = document.getElementById('new-vendor-name');
@@ -1287,10 +1498,7 @@
     const current = vendorEmoji(appData.vendors[idx]);
     document.getElementById('emoji-grid').innerHTML = EMOJI_CHOICES.map(e =>
       `<button type="button" class="emoji-choice ${e === current ? 'on' : ''}" onclick="pickEmoji('${e}')">${e}</button>`).join('');
-    document.getElementById('sheet-note').hidden = true;
-    document.getElementById('sheet-vendor').hidden = true;
-    document.getElementById('sheet-emoji').hidden = false;
-    document.getElementById('sheet').hidden = false;
+    showSheet('sheet-emoji');
   }
   function pickEmoji(e) {
     if (emojiTarget === null) return;
@@ -1342,11 +1550,13 @@
   let currentTab = 'vendors';
   function openSheet() {
     const form = currentTab === 'vendors' ? 'sheet-vendor' : 'sheet-note';
-    document.getElementById('sheet-note').hidden = form !== 'sheet-note';
-    document.getElementById('sheet-vendor').hidden = form !== 'sheet-vendor';
-    document.getElementById('sheet-emoji').hidden = true;
-    document.getElementById('sheet').hidden = false;
+    showSheet(form);
     document.querySelector(`#${form} input`).focus();
+  }
+  // 아래 창 안의 여러 입력 양식 중 하나만 보여줌
+  function showSheet(id) {
+    document.querySelectorAll('#sheet > .sheet-card').forEach(el => el.hidden = el.id !== id);
+    document.getElementById('sheet').hidden = false;
   }
   function closeSheet() {
     document.getElementById('sheet').hidden = true;

@@ -342,7 +342,7 @@
 <div id="save-status" class="hide"></div>
 <button id="save-btn" onclick="manualSave()">저장</button>
 <div id="toast"></div>
-<button id="fab" class="fab" hidden onclick="openSheet()" aria-label="새로 추가">
+<button id="fab" class="fab" onclick="openSheet()" aria-label="새로 추가">
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
 </button>
 
@@ -399,7 +399,7 @@
 
 <div class="container">
 
-  <div id="tab-checklist" class="tab-content active">
+  <div id="tab-checklist" class="tab-content">
     <div id="checklist-container"></div>
   </div>
 
@@ -437,7 +437,7 @@
     <div id="notes-container"></div>
   </div>
 
-  <div id="tab-vendors" class="tab-content">
+  <div id="tab-vendors" class="tab-content active">
     <div class="section-label">준비 현황</div>
     <div id="prep-summary" class="prep-summary"></div>
       <datalist id="vendor-categories">
@@ -497,13 +497,13 @@
 </div>
 
 <nav class="nav-bar">
-  <button class="nav-item active" data-tab="checklist" onclick="switchTab('checklist')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 9l2 2 4-4M8 16h8"/></svg>
-    <span>체크리스트</span>
-  </button>
-  <button class="nav-item" data-tab="vendors" onclick="switchTab('vendors')">
+  <button class="nav-item active" data-tab="vendors" onclick="switchTab('vendors')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M3 10l2-6h14l2 6M9 21v-6h6v6"/></svg>
     <span>준비 현황</span>
+  </button>
+  <button class="nav-item" data-tab="checklist" onclick="switchTab('checklist')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 9l2 2 4-4M8 16h8"/></svg>
+    <span>체크리스트</span>
   </button>
   <button class="nav-item" data-tab="dayof" onclick="switchTab('dayof')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/></svg>
@@ -633,10 +633,51 @@
       data.vendors = seeded.concat(rest);
       data.vendorsSeeded = true;
     }
+    if (!data.vendorsUpdated1) { applyVendorUpdate1(data.vendors); data.vendorsUpdated1 = true; }
     data.phases.forEach(p => { if (!Array.isArray(p.checklist)) p.checklist = []; if (!Array.isArray(p.timeline)) p.timeline = []; });
     // 당일 준비물이 없으면 기본값 추가
     if (!data.dayOf || !Array.isArray(data.dayOf.sections)) data.dayOf = JSON.parse(JSON.stringify(defaultDayOf));
     return data;
+  }
+
+  // 정해진 업체 한꺼번에 채우기 (2026-10-27, 한 번만 적용). 이미 적어둔 메모는 남기고 뒤에 붙임
+  function applyVendorUpdate1(vendors) {
+    const updates = [
+      ["식장", "빌라드마리"],
+      ["스튜디오", "아르센스튜디오"],
+      ["드레스 · 메이크업", "벨라제이"],
+      ["본식 스냅", "사계절"],
+      ["본식 DVD", "드뉴웨딩", "", "본식 DVD · 아이폰 스냅", "🎥"],
+      ["예복", "살로토"],
+      ["혼주 한복", "베틀한복", "", "혼주 한복", "👘"],
+      ["혼주 메이크업", "에나메이크업", "8시 / 예약금 15만원 선불", "혼주 메이크업 (신랑)"],
+      ["혼주 메이크업 (신부)", "뷰티조에 부평", "9시 30분 / 예약금 13만원 선불"],
+      ["부케", "달리아플라워", "9시에 벨라제이로 배송"],
+      ["청첩장", "비즈하우스 + 살롱드레터"],
+      ["사회자", "정연우 전문사회 (숨고)"],
+      ["신혼여행", "푸켓"],
+      ["상견례", "대전 더함뜰"],
+      ["플래너", "다이렉트웨딩플래너"],
+    ];
+    const dropped = ["예물", "한복"];
+    for (let i = vendors.length - 1; i >= 0; i--) {
+      if (dropped.includes(vendors[i].category)) vendors.splice(i, 1);
+    }
+    let prev = -1;
+    updates.forEach(([category, name, memo, rename, emoji], i) => {
+      let at = vendors.findIndex(v => v.category === category);
+      if (at < 0) {
+        // 없는 항목은 바로 앞 항목 뒤에 새로 만듦
+        at = prev + 1;
+        vendors.splice(at, 0, { id: Date.now() + i, emoji: "", category, name: "", memo: "" });
+      }
+      const v = vendors[at];
+      v.name = name;
+      if (memo && !v.memo.includes(memo)) v.memo = [v.memo, memo].filter(Boolean).join('\n');
+      if (rename) v.category = rename;
+      if (emoji && !v.emoji) v.emoji = emoji;
+      prev = at;
+    });
   }
 
   // 키 순서와 무관하게 같은 데이터인지 비교하기 위한 문자열
@@ -662,6 +703,7 @@
       document.getElementById('loading').style.display = 'none';
     }
     renderAll();
+    if (!(remote.data && remote.data.vendorsUpdated1)) autoSave();
   }
 
   // 입력 중에 상대방 변경이 오면, 입력을 마친 뒤에 반영
@@ -1280,7 +1322,7 @@
   }
 
   // --- + 버튼과 추가 창 ---
-  let currentTab = 'checklist';
+  let currentTab = 'vendors';
   function openSheet() {
     const form = currentTab === 'vendors' ? 'sheet-vendor' : 'sheet-note';
     document.getElementById('sheet-note').hidden = form !== 'sheet-note';

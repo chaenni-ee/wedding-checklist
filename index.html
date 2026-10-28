@@ -271,6 +271,23 @@
   .emoji-choice.on { border-color: var(--rose-deep); background: var(--rose-soft); }
 
   /* 설정 */
+  .storage-btn {
+    display: flex; align-items: center; gap: 14px; width: 100%; margin-bottom: 12px; padding: 16px 18px;
+    background: linear-gradient(135deg, #FBEDEA, #F6DDD7); border: 1px solid #F1D5CF; border-radius: 20px;
+    color: var(--ink); text-decoration: none; text-align: left; cursor: pointer; font: inherit;
+    box-shadow: 0 6px 18px rgba(176,106,106,0.10);
+  }
+  .storage-btn:active { transform: scale(0.99); }
+  .storage-btn.empty { background: #fff; border-style: dashed; box-shadow: none; }
+  .storage-icon { font-size: 1.6rem; line-height: 1; }
+  .storage-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .storage-text b { font-size: 0.98rem; }
+  .storage-text span { font-size: 0.76rem; color: var(--muted); }
+  .storage-arrow { font-size: 1.2rem; color: var(--rose-deep); }
+  input[type="url"] {
+    flex: 1; min-width: 0; padding: 11px 14px; border: 1px solid var(--line); background: var(--bg);
+    border-radius: 12px; font: inherit; font-size: 0.85rem; color: var(--ink); outline: none;
+  }
   .setting-label { display: block; font-size: 0.8rem; color: var(--muted); font-weight: 500; margin-bottom: 8px; }
   .list-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
   .list-row:last-child { border-bottom: none; }
@@ -482,7 +499,8 @@
   </div>
 
   <div id="tab-notes" class="tab-content">
-    <div class="section-label">메모</div>
+    <div class="section-label">메모 및 저장소</div>
+    <div id="storage-container"></div>
     <div id="notes-container"></div>
   </div>
 
@@ -509,6 +527,15 @@
       <div style="display:flex;">
         <input type="date" id="wedding-date" onchange="updateWeddingDate(this.value)">
       </div>
+    </div>
+
+    <div class="card">
+      <label class="setting-label" for="storage-url">📁 저장소 링크</label>
+      <div style="display:flex;">
+        <input type="url" id="storage-url" placeholder="https://drive.google.com/drive/folders/..."
+          onchange="updateStorageUrl(this.value)">
+      </div>
+      <p class="hint">구글 드라이브나 원드라이브 폴더의 공유 링크를 붙여넣으세요. '메모 및 저장소' 탭의 <b>저장소로 이동</b> 버튼이 이 폴더를 열어요.</p>
     </div>
 
     <div class="card">
@@ -562,7 +589,7 @@
   </button>
   <button class="nav-item" data-tab="notes" onclick="switchTab('notes')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>
-    <span>메모</span>
+    <span>메모·저장소</span>
   </button>
   <button class="nav-item" data-tab="settings" onclick="switchTab('settings')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -655,6 +682,7 @@
   function normalize(d) {
     const data = d ? JSON.parse(JSON.stringify(d)) : {};
     if (!data.weddingDate) data.weddingDate = "";
+    if (typeof data.storageUrl !== 'string') data.storageUrl = "";
     if (!Array.isArray(data.phases)) data.phases = [];
     if (!Array.isArray(data.customEvents)) data.customEvents = [];
     if (!Array.isArray(data.notes)) data.notes = [];
@@ -1053,8 +1081,50 @@
     renderDayOf();
     renderVendors();
     renderBudget();
+    renderStorage();
     renderNotes();
     renderSettings();
+  }
+
+  // --- 저장소 (구글 드라이브 / 원드라이브 폴더 링크) ---
+  function storageProvider(url) {
+    try {
+      const host = new URL(url).hostname;
+      if (host.endsWith('drive.google.com') || host.endsWith('docs.google.com')) return '구글 드라이브';
+      if (host.endsWith('1drv.ms') || host.includes('onedrive') || host.endsWith('sharepoint.com')) return '원드라이브';
+    } catch (e) {}
+    return '';
+  }
+  function renderStorage() {
+    const url = appData.storageUrl;
+    const provider = storageProvider(url);
+    document.getElementById('storage-container').innerHTML = url
+      ? `<a class="storage-btn" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+           <span class="storage-icon">📁</span>
+           <span class="storage-text"><b>저장소로 이동</b><span>${provider || '저장소'} 폴더 열기</span></span>
+           <span class="storage-arrow">↗</span>
+         </a>`
+      : `<button class="storage-btn empty" onclick="goToStorageSetting()">
+           <span class="storage-icon">📁</span>
+           <span class="storage-text"><b>저장소로 이동</b><span>설정에서 드라이브 폴더 링크를 먼저 넣어주세요</span></span>
+           <span class="storage-arrow">›</span>
+         </button>`;
+  }
+  function goToStorageSetting() {
+    switchTab('settings');
+    document.getElementById('storage-url').focus();
+  }
+  function updateStorageUrl(value) {
+    const url = value.trim();
+    if (url && !/^https:\/\//i.test(url)) {
+      showToast("https:// 로 시작하는 공유 링크를 붙여넣어 주세요");
+      document.getElementById('storage-url').value = appData.storageUrl;
+      return;
+    }
+    if (url === appData.storageUrl) return;
+    appData.storageUrl = url;
+    renderStorage(); autoSave();
+    showToast(url ? `${storageProvider(url) || '저장소'} 링크를 저장했어요` : "저장소 링크를 지웠어요");
   }
 
   // --- 공통 도우미 ---
@@ -1623,6 +1693,9 @@
   function renderSettings() {
     if (document.activeElement !== document.getElementById('wedding-date')) {
       document.getElementById('wedding-date').value = appData.weddingDate || "";
+    }
+    if (document.activeElement !== document.getElementById('storage-url')) {
+      document.getElementById('storage-url').value = appData.storageUrl || "";
     }
 
     const sortedEvents = appData.customEvents

@@ -330,6 +330,38 @@
   #dialog { position: fixed; inset: 0; z-index: 500; background: rgba(61,53,51,0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
   [hidden] { display: none !important; }
 
+  /* 당일 타임테이블 */
+  .tt-list { display: flex; flex-direction: column; }
+  .tt-row { display: flex; align-items: stretch; gap: 8px; position: relative; padding: 2px 0; }
+  .tt-time {
+    flex: 0 0 6.6em; align-self: flex-start; margin-top: 4px; padding: 7px 6px; font: inherit; font-size: 0.85rem;
+    font-weight: 700; font-variant-numeric: tabular-nums; color: var(--rose-deep);
+    border: 1px solid transparent; background: transparent; border-radius: 10px; outline: none;
+  }
+  .tt-time:focus, .tt-time:hover { border-color: var(--line); background: var(--bg); }
+  .tt-line { flex: 0 0 14px; display: flex; justify-content: center; position: relative; }
+  .tt-line::before { content: ""; position: absolute; top: 0; bottom: 0; width: 2px; background: var(--line); }
+  .tt-row:first-child .tt-line::before { top: 18px; }
+  .tt-row:last-child .tt-line::before { bottom: calc(100% - 18px); }
+  .tt-dot { position: relative; margin-top: 13px; width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid var(--rose); }
+  .tt-body { flex: 1; min-width: 0; padding: 8px 0 10px; border-bottom: 1px solid var(--line); }
+  .tt-row:last-child .tt-body { border-bottom: none; }
+  .tt-title { font-size: 0.95rem; font-weight: 500; line-height: 1.45; word-break: break-all; }
+  .tt-note {
+    display: block; width: 100%; margin-top: 3px; padding: 3px 0 !important; border: none !important;
+    background: transparent !important; font-size: 0.8rem !important; color: var(--muted) !important; border-radius: 0 !important;
+  }
+  .tt-note:focus { color: var(--ink) !important; }
+  .tt-row .btn-x { align-self: flex-start; margin-top: 6px; }
+  .tt-row.past .tt-title, .tt-row.past .tt-time { color: #C4BBB6; }
+  .tt-row.past .tt-dot { background: var(--line); border-color: var(--line); }
+  .tt-row.now .tt-dot { background: var(--rose-deep); border-color: var(--rose-deep); box-shadow: 0 0 0 5px var(--rose-soft); }
+  .tt-row.now .tt-body { background: linear-gradient(90deg, var(--rose-soft), transparent); border-radius: 10px; padding-left: 8px; }
+  .tt-now-badge {
+    align-self: flex-start; margin-top: 10px; background: var(--rose-deep); color: #fff; font-size: 0.68rem;
+    font-weight: 700; border-radius: 8px; padding: 2px 7px; white-space: nowrap;
+  }
+
   /* 오른쪽 아래 + 버튼 */
   .fab {
     position: fixed; z-index: 210; width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
@@ -470,6 +502,28 @@
   </div>
 
   <div id="tab-dayof" class="tab-content">
+    <div class="section-label">⏰ 당일 타임테이블</div>
+    <div class="card">
+      <div id="timetable-list" class="tt-list"></div>
+      <div class="add-row">
+        <input type="time" id="new-tt-time" aria-label="시간" style="flex:0 0 7.4em;">
+        <input type="text" id="new-tt-title" placeholder="할 일 (예: 헤메샵 도착)"
+          onkeydown="if(event.key==='Enter' && !event.isComposing) addTimelineRow()">
+        <button class="btn-add" onclick="addTimelineRow()">추가</button>
+      </div>
+    </div>
+
+    <div class="section-label">⚠️ 주의사항</div>
+    <div class="card" style="--accent:#EBC598">
+      <div class="item-list" id="caution-list" data-kind="caution" data-group="0"></div>
+      <div id="caution-empty"></div>
+      <div class="add-row">
+        <input type="text" id="new-caution" placeholder="잊지 말 것 (예: 반지는 사회자에게)"
+          onkeydown="if(event.key==='Enter' && !event.isComposing) addCaution()">
+        <button class="btn-add" onclick="addCaution()">추가</button>
+      </div>
+    </div>
+
     <div class="section-label">결혼식 당일</div>
     <div class="card">
       <div class="summary-row">
@@ -727,6 +781,9 @@
     data.phases.forEach(p => { if (!Array.isArray(p.checklist)) p.checklist = []; if (!Array.isArray(p.timeline)) p.timeline = []; });
     // 당일 준비물이 없으면 기본값 추가
     if (!data.dayOf || !Array.isArray(data.dayOf.sections)) data.dayOf = JSON.parse(JSON.stringify(defaultDayOf));
+    if (!Array.isArray(data.dayOf.timeline)) data.dayOf.timeline = [];
+    if (!Array.isArray(data.dayOf.cautions)) data.dayOf.cautions = [];
+    data.dayOf.timeline.forEach(r => { ["time", "title", "note"].forEach(f => { if (typeof r[f] !== 'string') r[f] = ""; }); });
     return data;
   }
 
@@ -928,11 +985,12 @@
   function moveItem(kind, group, from, to) {
     const arr = kind === 'phase' ? appData.phases[group].checklist
       : kind === 'dayof' ? appData.dayOf.sections[group].items
+      : kind === 'caution' ? appData.dayOf.cautions
       : appData.notes[group].items;
     const [moved] = arr.splice(from, 1);
     arr.splice(to, 0, moved);
     if (kind === 'phase') renderChecklist();
-    else if (kind === 'dayof') renderDayOf();
+    else if (kind === 'dayof' || kind === 'caution') renderDayOf();
     else renderNotes();
     autoSave();
   }
@@ -1268,7 +1326,155 @@
   }
 
   // --- 당일 준비물 탭 ---
+  // --- 당일 타임테이블 · 주의사항 ---
+  // 추천 순서/주의사항: 목록이 비어 있을 때 버튼으로만 넣음 (시간은 직접 채우기)
+  const TIMELINE_TEMPLATE = [
+    "기상 · 출발", "헤어·메이크업 샵 도착", "드레스 · 예복 착용", "식장 도착", "신부대기실 · 하객 맞이",
+    "예식 시작", "원판 촬영 (가족 · 친구)", "식사 · 테이블 인사", "2부 드레스 환복", "정산 · 짐 정리", "출발"
+  ];
+  const CAUTION_TEMPLATE = [
+    "반지는 누가 들고 있다가 언제 전달할지 정하기",
+    "사례비 · 헬퍼비 봉투에 미리 이름 써두기",
+    "휴대폰 · 지갑은 한 사람에게 맡기기",
+    "식 전에 물 · 간식 먹어두기 (빨대 챙기기)",
+    "축의금 가방은 정해둔 사람만 들고 다니기",
+    "식 끝나고 식권 · 방명록 · 소품 회수할 사람 정하기"
+  ];
+
+  function minutesOf(t) {
+    const m = /^(\d{1,2}):(\d{2})/.exec(t || "");
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+
+  // 시간순 (시간 없는 줄은 맨 뒤, 추가한 순서대로)
+  function sortedTimeline() {
+    return appData.dayOf.timeline
+      .map((r, idx) => ({ r, idx }))
+      .sort((a, b) => {
+        const ma = minutesOf(a.r.time), mb = minutesOf(b.r.time);
+        if ((ma === null) !== (mb === null)) return ma === null ? 1 : -1;
+        if (ma !== mb) return ma - mb;
+        return a.r.id - b.r.id;
+      });
+  }
+
+  function isWeddingDayToday() {
+    if (!appData.weddingDate) return false;
+    return daysUntil(appData.weddingDate) === 0;
+  }
+
+  function renderTimetable() {
+    const list = sortedTimeline();
+    // 결혼식 당일에는 지금 하고 있을 순서를 강조
+    let nowIdx = -1;
+    if (isWeddingDayToday()) {
+      const d = new Date();
+      const nowMin = d.getHours() * 60 + d.getMinutes();
+      list.forEach(({ r, idx }) => { const m = minutesOf(r.time); if (m !== null && m <= nowMin) nowIdx = idx; });
+    }
+    let passedNow = nowIdx === -1;
+    const rows = list.map(({ r, idx }) => {
+      const state = nowIdx === -1 ? '' : (idx === nowIdx ? 'now' : (passedNow ? '' : 'past'));
+      if (idx === nowIdx) passedNow = true;
+      return `
+        <div class="tt-row ${state}">
+          <input type="time" class="tt-time" value="${escapeHtml(r.time)}" aria-label="시간"
+            onchange="updateTimelineRow(${idx}, 'time', this.value, true)">
+          <div class="tt-line"><span class="tt-dot"></span></div>
+          <div class="tt-body">
+            <div class="tt-title editable" contenteditable="true" spellcheck="false" ${ENTER_BLUR}
+              onblur="updateTimelineRow(${idx}, 'title', this.innerText.trim())">${escapeHtml(r.title)}</div>
+            <input type="text" class="tt-note" value="${escapeHtml(r.note)}" placeholder="장소 · 담당 · 메모"
+              oninput="updateTimelineRow(${idx}, 'note', this.value)">
+          </div>
+          ${state === 'now' ? '<span class="tt-now-badge">지금</span>' : ''}
+          <button class="btn-x" onclick="deleteTimelineRow(${idx})" aria-label="삭제">×</button>
+        </div>`;
+    }).join('');
+    document.getElementById('timetable-list').innerHTML = rows ||
+      `<div class="empty">시간과 할 일을 아래에서 추가하세요.
+         <button class="btn-ghost" style="margin-top:8px; display:block;" onclick="fillTimelineTemplate()">추천 순서 넣기 (시간은 직접)</button></div>`;
+
+    const cautions = appData.dayOf.cautions;
+    document.getElementById('caution-list').innerHTML = cautions.map((item, i) => checkItemHtml(item,
+      `toggleCaution(${i})`, `updateCautionText(${i}, this.innerText)`, `deleteCaution(${i})`)).join('');
+    document.getElementById('caution-empty').innerHTML = cautions.length ? '' :
+      `<div class="empty">당일에 헷갈리기 쉬운 것들을 적어두세요.
+         <button class="btn-ghost" style="margin-top:8px; display:block;" onclick="fillCautionTemplate()">추천 주의사항 넣기</button></div>`;
+  }
+
+  function addTimelineRow() {
+    const timeEl = document.getElementById('new-tt-time');
+    const titleEl = document.getElementById('new-tt-title');
+    const title = titleEl.value.trim();
+    if (!title) { showToast("할 일을 입력해주세요"); return; }
+    appData.dayOf.timeline.push({ id: Date.now(), time: timeEl.value || "", title, note: "" });
+    titleEl.value = ""; timeEl.value = "";
+    renderTimetable(); autoSave();
+    titleEl.focus();
+  }
+  function updateTimelineRow(idx, field, value, rerender) {
+    const row = appData.dayOf.timeline[idx];
+    if (!row || row[field] === value) return;
+    if (field === 'title' && !value) { renderTimetable(); return; }
+    row[field] = value;
+    if (rerender) renderTimetable();
+    autoSave();
+  }
+  async function deleteTimelineRow(idx) {
+    const row = appData.dayOf.timeline[idx];
+    if (await askConfirm(`'${row.time ? row.time + ' ' : ''}${row.title}' 순서를 삭제할까요?`)) {
+      appData.dayOf.timeline.splice(idx, 1);
+      renderTimetable(); autoSave();
+    }
+  }
+  function fillTimelineTemplate() {
+    const base = Date.now();
+    TIMELINE_TEMPLATE.forEach((title, i) => appData.dayOf.timeline.push({ id: base + i, time: "", title, note: "" }));
+    renderTimetable(); autoSave();
+    showToast("추천 순서를 넣었어요. 시간을 채우면 자동으로 정렬돼요");
+  }
+
+  function toggleCaution(i) {
+    const item = appData.dayOf.cautions[i];
+    item.done = !item.done;
+    renderTimetable(); autoSave();
+  }
+  function updateCautionText(i, newText) {
+    const text = newText.trim();
+    const item = appData.dayOf.cautions[i];
+    if (!text || text === item.text) return;
+    item.text = text;
+    autoSave();
+  }
+  function addCaution() {
+    const input = document.getElementById('new-caution');
+    const text = input.value.trim();
+    if (!text) return;
+    appData.dayOf.cautions.push({ text, done: false });
+    input.value = "";
+    renderTimetable(); autoSave();
+    document.getElementById('new-caution').focus();
+  }
+  async function deleteCaution(i) {
+    if (await askConfirm(`'${appData.dayOf.cautions[i].text}' 항목을 삭제할까요?`)) {
+      appData.dayOf.cautions.splice(i, 1);
+      renderTimetable(); autoSave();
+    }
+  }
+  function fillCautionTemplate() {
+    CAUTION_TEMPLATE.forEach(text => appData.dayOf.cautions.push({ text, done: false }));
+    renderTimetable(); autoSave();
+    showToast("추천 주의사항을 넣었어요. 필요 없는 건 지워주세요");
+  }
+
+  // 결혼식 당일에는 1분마다 '지금' 표시를 옮김 (입력 중엔 건너뜀)
+  setInterval(() => {
+    if (appData && isWeddingDayToday() && !isEditing()) renderTimetable();
+  }, 60000);
+
   function renderDayOf() {
+    renderTimetable();
     const sections = appData.dayOf.sections;
     let total = 0, doneCount = 0, cards = "", chips = "";
 
